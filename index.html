@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAKA-CHI CALCULATE | 3D Printing Quotation</title>
+    
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f5fa', 100: '#e1ebf4', 200: '#c8dced', 300: '#a3c5e2',
+                            400: '#78a8d4', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8',
+                            800: '#1e3a8a', 900: '#0f172a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // GOOGLE SHEETS LIVE DATABASE LINKS
+        const URL_FILAMENTS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSKlVjA-oHs95wFhQSRwSW4roQA3Ilo67VTT0hDNDnkTDlba4LU5UAKb2F8i_a9IX1q0LJhgFNN9pZF/pub?gid=1295243501&single=true&output=csv";
+        const URL_COMPONENTS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSKlVjA-oHs95wFhQSRwSW4roQA3Ilo67VTT0hDNDnkTDlba4LU5UAKb2F8i_a9IX1q0LJhgFNN9pZF/pub?gid=0&single=true&output=csv";
+
+        // ICONS COMPONENTS (SVG)
+        const IconCheck = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>;
+        const IconChevronRight = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>;
+        const IconChevronLeft = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>;
+        const IconTrash = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>;
+        const IconAlertCircle = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>;
+        const IconRefresh = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>;
+
+        const Header = ({ onRefresh, isRefreshing }) => (
+            <header className="bg-brand-900 text-white py-6 shadow-md relative z-10">
+                <div className="max-w-6xl mx-auto px-4 md:px-6 flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div className="flex flex-col items-center md:items-start">
+                        <h1 className="text-2xl font-bold tracking-wider">RAKA-CHI <span className="font-light text-brand-100">CALCULATE</span></h1>
+                        <p className="text-sm text-brand-100 uppercase tracking-widest mt-1 text-xs">Create • Custom • Cherish</p>
+                    </div>
+                    {onRefresh && (
+                        <button 
+                            onClick={onRefresh} 
+                            disabled={isRefreshing}
+                            className={`flex items-center gap-2 bg-brand-800 hover:bg-brand-700 active:bg-brand-600 px-4 py-2.5 rounded-lg text-xs tracking-wider font-bold transition-all shadow-sm border border-brand-700 ${isRefreshing ? 'opacity-75 cursor-not-allowed' : ''}`}
+                        >
+                            <span className={isRefreshing ? "animate-spin" : ""}><IconRefresh /></span>
+                            {isRefreshing ? 'UPDATING...' : 'REFRESH DATA'}
+                        </button>
+                    )}
+                </div>
+            </header>
+        );
+
+        const Stepper = ({ currentStep }) => {
+            const steps = ['MATERIAL', 'PRODUCT', 'PRINTING', 'COMPONENTS', 'PRICE'];
+            return (
+                <div className="max-w-4xl mx-auto py-8 px-4">
+                    <div className="flex items-center justify-between relative">
+                        <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-full h-1 bg-slate-200 z-0 rounded-full"></div>
+                        <div className="absolute left-0 top-1/2 transform -translate-y-1/2 h-1 bg-brand-500 z-0 rounded-full transition-all duration-500" style={{ width: `${((currentStep - 1) / (steps.length - 1)) * 100}%` }}></div>
+                        
+                        {steps.map((step, idx) => {
+                            const stepNum = idx + 1;
+                            const isActive = stepNum === currentStep;
+                            const isPast = stepNum < currentStep;
+                            return (
+                                <div key={step} className="relative z-10 flex flex-col items-center gap-2">
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300 shadow-sm
+                                        ${isActive ? 'bg-brand-500 text-white ring-4 ring-brand-100' : isPast ? 'bg-brand-800 text-white' : 'bg-white text-slate-400 border-2 border-slate-200'}`}>
+                                        {isPast ? <IconCheck /> : stepNum}
+                                    </div>
+                                    <span className={`text-xs font-semibold hidden md:block ${isActive ? 'text-brand-800' : isPast ? 'text-slate-600' : 'text-slate-400'}`}>
+                                        {step}
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [db, setDb] = useState(null);
+            const [dbError, setDbError] = useState(false);
+            const [isRefreshing, setIsRefreshing] = useState(false);
+            const [currentStep, setCurrentStep] = useState(1);
+            const [errors, setErrors] = useState({});
+
+            const [formData, setFormData] = useState({
+                productName: '',
+                partCount: 1,
+                parts: [{ id: Date.now().toString(), name: '', filamentId: '', colors: [], supportReq: 'NO', weight: '' }],
+                plateCount: 1,
+                plates: [{ id: Date.now().toString(), partsInPlate: 1, parts: [{ partId: '', qty: '' }], timeH: '', timeM: '', plateQty: '1' }],
+                components: [{ id: Date.now().toString(), compId: '', qty: '' }],
+                orderQty: 1
+            });
+
+            const fetchDatabase = async () => {
+                setIsRefreshing(true);
+                setDbError(false);
+                try {
+                    const fetchCSV = async (url) => {
+                        const cacheBusterUrl = url + '&cb=' + new Date().getTime();
+                            
+                            try {
+                                const directResponse = await fetch(cacheBusterUrl);
+                                if (directResponse.ok) {
+                                    return await directResponse.text();
+                                }
+                            } catch (error) {
+                                console.warn("Direct fetch gagal, mencuba proxy utama...", error);
+                            }
+
+                            try {
+                                const proxy1Url = `https://corsproxy.io/?${encodeURIComponent(cacheBusterUrl)}`;
+                                const proxy1Response = await fetch(proxy1Url);
+                                if (proxy1Response.ok) {
+                                    return await proxy1Response.text();
+                                }
+                            } catch (error) {
+                                console.warn("Proxy utama gagal, mencuba proxy alternatif...", error);
+                            }
+
+                            const proxy2Url = `https://api.allorigins.win/get?url=${encodeURIComponent(cacheBusterUrl)}`;
+                            const proxy2Response = await fetch(proxy2Url);
+                            if (!proxy2Response.ok) throw new Error(`Semua kaedah sambungan DB gagal.`);
+                            const data = await proxy2Response.json();
+                            return data.contents;
+                        };
+
+                        const [filamentsText, componentsText] = await Promise.all([
+                            fetchCSV(URL_FILAMENTS),
+                            fetchCSV(URL_COMPONENTS) 
+                        ]);
+
+                        const parseCSVRaw = (csvText) => new Promise((resolve, reject) => {
+                            Papa.parse(csvText, {
+                                header: false, // Turn off auto header so we can safely clean it
+                                skipEmptyLines: true,
+                                complete: (results) => resolve(results.data),
+                                error: (err) => reject(err)
+                            });
+                        });
+
+                        const filamentsRaw = await parseCSVRaw(filamentsText);
+                        const componentsRaw = await parseCSVRaw(componentsText);
+
+                        const processData = (rawData, requiredKeywords) => {
+                            let headerRowIndex = -1;
+                            
+                            for (let i = 0; i < rawData.length; i++) {
+                                if (!rawData[i]) continue;
+                                const rowStr = rawData[i].join(' ').toUpperCase();
+                                if (requiredKeywords.some(kw => rowStr.includes(kw))) {
+                                    headerRowIndex = i;
+                                    break;
+                                }
+                            }
+                            
+                            if (headerRowIndex === -1) return []; 
+                            
+                            const headers = rawData[headerRowIndex].map(h => {
+                                if(!h) return '';
+                                // Clean up headers (remove BOM, quotes, commas)
+                                return String(h).replace(/^\uFEFF/, '').replace(/['"]/g, '').replace(/,/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
+                            });
+                            
+                            const data = [];
+                            for (let i = headerRowIndex + 1; i < rawData.length; i++) {
+                                const rowArray = rawData[i];
+                                if (!rowArray || rowArray.join('').trim() === '') continue;
+                                
+                                const rowObj = {};
+                                headers.forEach((header, index) => {
+                                    if (header) {
+                                        rowObj[header] = rowArray[index] !== undefined && rowArray[index] !== null ? String(rowArray[index]).trim() : '';
+                                    }
+                                });
+                                data.push(rowObj);
+                            }
+                            return data;
+                        };
+
+                        const filamentsCSV = processData(filamentsRaw, ['MATERIAL TYPE', 'BRAND']);
+                        const componentsCSV = processData(componentsRaw, ['COMPONENT NAME', 'CATEGORY']);
+
+                        const getVal = (row, searchStrings) => {
+                            const key = Object.keys(row).find(k => searchStrings.some(s => k.includes(s)));
+                            return key ? row[key] : '';
+                        };
+
+                        const parseAppNumber = (val, fallback) => {
+                            if (val === undefined || val === null || val === '') return fallback;
+                            const cleaned = String(val).replace(/[^\d.-]/g, '');
+                            const parsed = parseFloat(cleaned);
+                            return isNaN(parsed) ? fallback : parsed;
+                        };
+
+                        const groupedFilaments = {};
+                        
+                        filamentsCSV.forEach((row, rowIndex) => {
+                            const family = getVal(row, ['FAMILY']);
+                            const type = getVal(row, ['MATERIAL TYPE', 'MATERIAL']);
+                            const variant = getVal(row, ['VARIANT']);
+                            const brand = getVal(row, ['BRAND']);
+                            const colour = getVal(row, ['COLOUR', 'COLOR']);
+                            
+                            if (!type && !brand) return; // Skip if basically empty
+                            
+                            const key = `${type}-${variant}-${brand}`;
+                            
+                            if (!groupedFilaments[key]) {
+                                groupedFilaments[key] = {
+                                    id: key,
+                                    family: family || 'Unknown',
+                                    type: type,
+                                    variant: variant,
+                                    brand: brand,
+                                    colors: [],
+                                    rateMonoNo: parseAppNumber(getVal(row, ['MONOCHROME WITHOUT SUPPORT', 'MONOCHROME WITHOUT']), 0.31),
+                                    rateMonoYes: parseAppNumber(getVal(row, ['MONOCHROME WITH SUPPORT', 'MONOCHROME WITH']), 0.33),
+                                    rateMultiNo: parseAppNumber(getVal(row, ['MULTICOLOUR WITHOUT SUPPORT', 'MULTICOLOR WITHOUT']), 0.37),
+                                    rateMultiYes: parseAppNumber(getVal(row, ['MULTICOLOUR WITH SUPPORT', 'MULTICOLOR WITH']), 0.39),
+                                };
+                            }
+                            
+                            if (colour) {
+                                const colorsList = colour.split(',').map(c => c.trim());
+                                colorsList.forEach(c => {
+                                    if (c && !groupedFilaments[key].colors.includes(c)) {
+                                        groupedFilaments[key].colors.push(c);
+                                    }
+                                });
+                            }
+                        });
+                        
+                        const finalFilaments = Object.values(groupedFilaments);
+
+                        const finalComponents = componentsCSV
+                            .filter(row => getVal(row, ['COMPONENT NAME']))
+                            .map((row, i) => {
+                                return {
+                                    id: `COMP-${i}`,
+                                    category: getVal(row, ['CATEGORY']),
+                                    name: getVal(row, ['COMPONENT NAME']),
+                                    specification: getVal(row, ['SPECIFICATION']),
+                                    unit: getVal(row, ['UNIT']) || 'pcs',
+                                    price: parseAppNumber(getVal(row, ['SALE PRICE']), 0)
+                                };
+                            });
+
+                        setDb({ 
+                            FILAMENTS: finalFilaments, 
+                            COMPONENTS: finalComponents,
+                            rawDebug: filamentsRaw.slice(0, 8) 
+                        });
+                    } catch (error) {
+                        console.error("Failed downloading DB:", error);
+                        setDbError(true);
+                    } finally {
+                        setIsRefreshing(false);
+                    }
+                };
+
+            useEffect(() => {
+                fetchDatabase();
+            }, []);
+
+            const validateStep = (step) => {
+                const newErrors = {};
+                let isValid = true;
+
+                if (step === 2) {
+                    if (!formData.productName.trim()) { newErrors.productName = "Product name is required."; isValid = false; }
+                    formData.parts.forEach((part, index) => {
+                        if (!part.name.trim()) { newErrors[`part_${index}_name`] = "Part name required."; isValid = false; }
+                        if (!part.filamentId) { newErrors[`part_${index}_filament`] = "Filament required."; isValid = false; }
+                        if (!part.colors || part.colors.length === 0) { newErrors[`part_${index}_colors`] = "Colour(s) required."; isValid = false; }
+                        if (!part.weight || part.weight <= 0) { newErrors[`part_${index}_weight`] = "Weight required."; isValid = false; }
+                    });
+                }
+                if (step === 3) {
+                    formData.plates.forEach((plate, pIndex) => {
+                        if (!plate.timeH && !plate.timeM) { newErrors[`plate_${pIndex}_time`] = "Print time required."; isValid = false; }
+                        if (!plate.plateQty || plate.plateQty <= 0) { newErrors[`plate_${pIndex}_qty`] = "Plate qty required."; isValid = false; }
+                        plate.parts.forEach((pp, ppIndex) => {
+                            if (!pp.partId) { newErrors[`plate_${pIndex}_part_${ppIndex}_id`] = "Select part."; isValid = false; }
+                            if (!pp.qty || pp.qty <= 0) { newErrors[`plate_${pIndex}_part_${ppIndex}_qty`] = "Qty required."; isValid = false; }
+                        });
+                    });
+                }
+                if (step === 4) {
+                    formData.components.forEach((comp, index) => {
+                        if (comp.compId && (!comp.qty || comp.qty <= 0)) {
+                            newErrors[`comp_${index}_qty`] = "Quantity required if component selected."; isValid = false;
+                        }
+                    });
+                }
+
+                setErrors(newErrors);
+                return isValid;
+            };
+
+            const nextStep = () => { if (validateStep(currentStep)) { setCurrentStep(prev => Math.min(prev + 1, 5)); window.scrollTo(0, 0); } };
+            const prevStep = () => { setCurrentStep(prev => Math.max(prev - 1, 1)); window.scrollTo(0, 0); };
+
+            // Auto-append component row
+            useEffect(() => {
+                if(formData.components.length > 0) {
+                    const lastComp = formData.components[formData.components.length - 1];
+                    if (lastComp && lastComp.compId && lastComp.qty) {
+                        setFormData(prev => ({
+                            ...prev,
+                            components: [...prev.components, { id: Date.now().toString(), compId: '', qty: '' }]
+                        }));
+                    }
+                }
+            }, [formData.components]);
+
+            const quotation = useMemo(() => {
+                if (!db) return null;
+                
+                let printSellingTotal = 0;
+                let compSellingTotal = 0;
+                let plateBreakdowns = [];
+                let componentBreakdowns = [];
+                let plateDetailsUI = [];
+                
+                let totalTotalPlates = 0;
+
+                // 1. Component Cost
+                formData.components.forEach(comp => {
+                    if (comp.compId && comp.qty) {
+                        const dbComp = db.COMPONENTS.find(c => c.id === comp.compId);
+                        if (dbComp) {
+                            const qty = parseInt(comp.qty) || 0;
+                            let totalCompLineCost = dbComp.price * qty;
+                            compSellingTotal += totalCompLineCost;
+                            
+                            componentBreakdowns.push({
+                                name: `${dbComp.name} ${dbComp.specification ? `- ${dbComp.specification}` : ''}`,
+                                detail: `(RM${dbComp.price.toFixed(2)}/${dbComp.unit}) x${qty}`,
+                                total: totalCompLineCost
+                            });
+                        }
+                    }
+                });
+
+                // 2. Printing Cost (Infection Status per Plate)
+                formData.plates.forEach((plate, index) => {
+                    const plateQty = parseInt(plate.plateQty) || 1;
+                    totalTotalPlates += plateQty; 
+
+                    let plateHasSupport = false;
+                    let plateIsMulti = false;
+                    let weightPerPlate = 0;
+                    let selectedFilamentRef = null;
+
+                    // Jangkitan Plate (Periksa keseluruhan)
+                    plate.parts.forEach(pp => {
+                        const partInfo = formData.parts.find(p => p.id === pp.partId);
+                        if (partInfo) {
+                            if (partInfo.supportReq === 'YES') plateHasSupport = true;
+                            if (partInfo.colors && partInfo.colors.length > 1) plateIsMulti = true;
+                            
+                            const partQty = parseInt(pp.qty) || 1;
+                            const weight = parseFloat(partInfo.weight) || 0;
+                            weightPerPlate += (weight * partQty);
+                            
+                            // Reference to grab the correct rates
+                            if(!selectedFilamentRef) {
+                                selectedFilamentRef = db.FILAMENTS.find(f => f.id === partInfo.filamentId);
+                            }
+                        }
+                    });
+
+                    let statusText = "MONOCHROME WITHOUT SUPPORT";
+                    let finalRatePerGram = 0;
+
+                    if (selectedFilamentRef) {
+                        if (plateIsMulti && plateHasSupport) {
+                            statusText = "MULTICOLOUR WITH SUPPORT";
+                            finalRatePerGram = selectedFilamentRef.rateMultiYes;
+                        } else if (plateIsMulti && !plateHasSupport) {
+                            statusText = "MULTICOLOUR WITHOUT SUPPORT";
+                            finalRatePerGram = selectedFilamentRef.rateMultiNo;
+                        } else if (!plateIsMulti && plateHasSupport) {
+                            statusText = "MONOCHROME WITH SUPPORT";
+                            finalRatePerGram = selectedFilamentRef.rateMonoYes;
+                        } else {
+                            statusText = "MONOCHROME WITHOUT SUPPORT";
+                            finalRatePerGram = selectedFilamentRef.rateMonoNo;
+                        }
+                    }
+
+                    // Calculation based on Total Grams in Plate * Final Rate * Plate Qty
+                    let totalCostForOnePlate = weightPerPlate * finalRatePerGram;
+                    let totalPlateCost = totalCostForOnePlate * plateQty;
+                    
+                    printSellingTotal += totalPlateCost;
+
+                    if (weightPerPlate > 0) {
+                        plateBreakdowns.push({
+                            name: `PLATE ${String(index + 1).padStart(2, '0')}`,
+                            detail: `(${weightPerPlate.toFixed(1)}g x RM${finalRatePerGram.toFixed(2)}) x${plateQty}`,
+                            total: totalPlateCost
+                        });
+                        
+                        plateDetailsUI.push({
+                            originalPlate: plate, plateIndex: index, statusText: statusText,
+                            totalWeight: weightPerPlate, effectiveRate: finalRatePerGram,
+                        });
+                    }
+                });
+
+                // 3. Automatik Plate Fee
+                if (totalTotalPlates > 0) {
+                    const plateFeeService = db.COMPONENTS.find(c => 
+                        c.category?.toUpperCase() === 'SERVICES' && 
+                        c.name?.toUpperCase() === 'PLATE FEE'
+                    );
+
+                    if (plateFeeService) {
+                        const totalPlateFee = plateFeeService.price * totalTotalPlates;
+                        compSellingTotal += totalPlateFee;
+                        
+                        // Insert at the top of components breakdown list
+                        componentBreakdowns.unshift({ 
+                            name: `${plateFeeService.name}`, 
+                            detail: `(RM${plateFeeService.price.toFixed(2)}/${plateFeeService.unit}) x${totalTotalPlates}`,
+                            total: totalPlateFee
+                        });
+                    }
+                }
+
+                // Add epsilon for JS floating point rounding safety
+                const sellingPricePerUnit = Math.round((printSellingTotal + compSellingTotal + Number.EPSILON) * 100) / 100;
+                const totalEstimatedPrice = Math.round((sellingPricePerUnit * (parseInt(formData.orderQty) || 1) + Number.EPSILON) * 100) / 100;
+
+                return {
+                    printSellingTotal, compSellingTotal, sellingPricePerUnit,
+                    totalEstimatedPrice, plateBreakdowns, componentBreakdowns, plateDetailsUI
+                };
+            }, [formData, db]);
+
+            if (dbError) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                        <div className="text-center p-8 bg-white rounded-2xl shadow-sm border border-red-200">
+                            <IconAlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                            <h2 className="text-xl font-bold text-slate-800">Gagal Memuat Turun Data</h2>
+                            <p className="text-slate-600 mt-2">Sila semak semula link CSV Google Sheets anda.</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (!db) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                        <div className="text-center space-y-4">
+                            <div className="w-12 h-12 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin mx-auto"></div>
+                            <p className="text-brand-900 font-semibold animate-pulse">Menghubungkan ke Google Sheets...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            const renderStep1 = () => (
+                <div className="animate-fade-in space-y-8">
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div className="bg-slate-50 border-b border-slate-200 p-6">
+                            <h2 className="text-xl font-bold text-brand-900">Available Filaments</h2>
+                            <p className="text-sm text-slate-500 mt-1">Review our supported materials and colours (Prices listed are selling rates).</p>
+                        </div>
+                        <div className="p-0 overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-50 text-slate-600 text-sm border-b border-slate-200">
+                                        <th className="p-4 font-semibold">Material Type</th>
+                                        <th className="p-4 font-semibold">Brand & Variant</th>
+                                        <th className="p-4 font-semibold">Available Colours</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {db.FILAMENTS.length > 0 ? db.FILAMENTS.map((f, i) => (
+                                        <tr key={i} className="border-b border-slate-100 hover:bg-slate-50">
+                                            <td className="p-4 font-semibold text-brand-800">{f.type}</td>
+                                            <td className="p-4 text-slate-600">{f.brand} - {f.variant}</td>
+                                            <td className="p-4">
+                                                <div className="flex flex-wrap gap-1">
+                                                    {f.colors.map(c => (
+                                                        <span key={c} className="px-2 py-1 bg-white border border-slate-200 text-xs rounded-md text-slate-600 shadow-sm">{c}</span>
+                                                    ))}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )) : (
+                                        <tr>
+                                            <td colSpan="3" className="p-4 bg-red-50">
+                                                <div className="text-red-600 font-bold mb-2">Tiada rekod filament dijumpai.</div>
+                                                <div className="text-sm text-slate-700 mb-2">Sila semak struktur lajur CSV. Debug Header:</div>
+                                                <pre className="text-xs bg-white p-3 border border-red-200 rounded overflow-x-auto text-slate-800 font-mono">
+                                                    {JSON.stringify(db.rawDebug, null, 2)}
+                                                </pre>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div className="bg-slate-50 border-b border-slate-200 p-6">
+                            <h2 className="text-xl font-bold text-brand-900">Additional Components</h2>
+                            <p className="text-sm text-slate-500 mt-1">Available hardware and add-ons.</p>
+                        </div>
+                        <div className="p-0 overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-50 text-slate-600 text-sm border-b border-slate-200">
+                                        <th className="p-4 font-semibold">Name</th>
+                                        <th className="p-4 font-semibold">Specification</th>
+                                        <th className="p-4 font-semibold">Sale Price / Unit</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {db.COMPONENTS.length > 0 ? db.COMPONENTS.filter(c => c.category?.toUpperCase() !== 'SERVICES').map((c, i) => (
+                                        <tr key={i} className="border-b border-slate-100 hover:bg-slate-50">
+                                            <td className="p-4 font-semibold text-brand-800">{c.name}</td>
+                                            <td className="p-4 text-slate-600">{c.specification}</td>
+                                            <td className="p-4 text-slate-700 font-medium">RM {c.price.toFixed(2)} / {c.unit}</td>
+                                        </tr>
+                                    )) : (
+                                        <tr><td colSpan="3" className="p-4 text-center text-slate-400">Tiada rekod komponen.</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const renderStep2 = () => {
+                const handlePartCountChange = (e) => {
+                    const count = parseInt(e.target.value) || 1;
+                    const newParts = [...formData.parts];
+                    if (count > newParts.length) {
+                        for (let i = newParts.length; i < count; i++) {
+                            newParts.push({ id: Date.now().toString() + i, name: '', filamentId: '', colors: [], supportReq: 'NO', weight: '' });
+                        }
+                    } else if (count < newParts.length) {
+                        newParts.splice(count);
+                    }
+                    setFormData({ ...formData, partCount: count, parts: newParts });
+                };
+
+                const updatePart = (index, field, value) => {
+                    const newParts = formData.parts.map((p, i) => {
+                        if (i === index) {
+                            let updated = { ...p, [field]: value };
+                            if (field === 'filamentId') updated.colors = []; // Reset color if filament changes
+                            return updated;
+                        }
+                        return p;
+                    });
+                    setFormData({ ...formData, parts: newParts });
+                };
+
+                return (
+                    <div className="space-y-6 animate-fade-in">
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                            <h2 className="text-xl font-bold text-brand-900 mb-6">Product Details</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-2">PRODUCT NAME</label>
+                                    <input type="text" value={formData.productName} onChange={e => setFormData({...formData, productName: e.target.value.toUpperCase()})}
+                                        className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all ${errors.productName ? 'border-red-500' : 'border-slate-300'}`} placeholder="E.G., CUSTOM ENCLOSURE V2" />
+                                    {errors.productName && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><IconAlertCircle/>{errors.productName}</p>}
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-2">NUMBER OF PRODUCT PARTS</label>
+                                    <select value={formData.partCount} onChange={handlePartCountChange} className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none bg-white">
+                                        {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        {formData.parts.map((part, index) => {
+                            const selectedFilament = db.FILAMENTS.find(f => f.id === part.filamentId);
+                            const availableColors = selectedFilament ? selectedFilament.colors : [];
+
+                            return (
+                                <div key={part.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden">
+                                    <div className="absolute top-0 left-0 w-1 h-full bg-brand-500"></div>
+                                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                        <span className="bg-slate-100 text-slate-500 px-2 py-1 rounded text-sm">PART {String(index + 1).padStart(2, '0')}</span>
+                                    </h3>
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-5">
+                                        <div className="lg:col-span-2">
+                                            <label className="block text-xs font-semibold text-slate-500 mb-1">PART NAME</label>
+                                            <input type="text" value={part.name} onChange={e => updatePart(index, 'name', e.target.value.toUpperCase())}
+                                                className={`w-full p-2.5 text-sm border rounded-lg outline-none ${errors[`part_${index}_name`] ? 'border-red-500' : 'border-slate-300'}`} placeholder="E.G., TOP COVER" />
+                                        </div>
+                                        <div className="lg:col-span-4">
+                                            <label className="block text-xs font-semibold text-slate-500 mb-1">FILAMENT TYPE</label>
+                                            <select value={part.filamentId} onChange={e => updatePart(index, 'filamentId', e.target.value)}
+                                                className={`w-full p-2.5 text-sm border rounded-lg outline-none bg-white ${errors[`part_${index}_filament`] ? 'border-red-500' : 'border-slate-300'}`}>
+                                                <option value="">Select filament...</option>
+                                                {db.FILAMENTS.map(f => <option key={f.id} value={f.id}>{f.type} - {f.brand} ({f.variant})</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="lg:col-span-6">
+                                            <label className="block text-xs font-semibold text-slate-500 mb-1">COLOUR(S) - (Boleh pilih lebih dari satu)</label>
+                                            <div className="flex flex-wrap gap-2 mt-1">
+                                                {availableColors.length > 0 ? availableColors.map(c => {
+                                                    const isSelected = part.colors?.includes(c);
+                                                    return (
+                                                        <button key={c} type="button"
+                                                            onClick={() => {
+                                                                let newColors = [...(part.colors || [])];
+                                                                if (isSelected) newColors = newColors.filter(color => color !== c);
+                                                                else newColors.push(c);
+                                                                updatePart(index, 'colors', newColors);
+                                                            }}
+                                                            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
+                                                                isSelected ? 'bg-brand-500 text-white border-brand-500 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-brand-300 hover:bg-slate-50'
+                                                            }`}
+                                                        >
+                                                            {c}
+                                                        </button>
+                                                    )
+                                                }) : <span className="text-xs text-slate-400 py-1.5 px-1">Sila pilih filament dahulu untuk melihat warna...</span>}
+                                            </div>
+                                            {errors[`part_${index}_colors`] && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><IconAlertCircle/>{errors[`part_${index}_colors`]}</p>}
+                                        </div>
+                                        <div className="lg:col-span-2">
+                                            <label className="block text-xs font-semibold text-slate-500 mb-1">EST. WEIGHT (g)</label>
+                                            <input type="number" min="0" step="0.1" value={part.weight} onChange={e => updatePart(index, 'weight', e.target.value)}
+                                                className={`w-full p-2.5 text-sm border rounded-lg outline-none ${errors[`part_${index}_weight`] ? 'border-red-500' : 'border-slate-300'}`} placeholder="e.g., 45.5" />
+                                        </div>
+                                        <div className="lg:col-span-4">
+                                            <label className="block text-xs font-semibold text-slate-500 mb-1">SUPPORT REQUIRED?</label>
+                                            <div className="flex gap-4 mt-1">
+                                                <label className="flex items-center gap-2 cursor-pointer p-1">
+                                                    <input type="radio" name={`support_${index}`} value="YES" checked={part.supportReq === 'YES'} onChange={() => updatePart(index, 'supportReq', 'YES')} className="w-4 h-4 text-brand-600 focus:ring-brand-500"/>
+                                                    <span className="text-sm">YES</span>
+                                                </label>
+                                                <label className="flex items-center gap-2 cursor-pointer p-1">
+                                                    <input type="radio" name={`support_${index}`} value="NO" checked={part.supportReq === 'NO'} onChange={() => updatePart(index, 'supportReq', 'NO')} className="w-4 h-4 text-brand-600 focus:ring-brand-500"/>
+                                                    <span className="text-sm">NO</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="lg:col-span-6 mt-2 pt-4 border-t border-slate-200 flex items-center justify-between bg-slate-50 -mx-6 -mb-6 px-6 py-4 rounded-b-2xl">
+                                            <div className="flex items-center gap-2">
+                                                <div className="p-1.5 bg-white shadow-sm rounded text-slate-500">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                                                </div>
+                                                <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Classification</span>
+                                            </div>
+                                            <span className={`text-xs px-3 py-1 rounded-full font-bold shadow-sm ${part.colors?.length > 1 ? 'bg-purple-100 text-purple-700 border border-purple-200' : 'bg-white border border-slate-200 text-slate-600'}`}>
+                                                {part.colors?.length > 1 ? 'MULTICOLOR' : (part.colors?.length === 1 ? 'MONOCHROME' : 'PENDING SELECTION')}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </div>
+                );
+            };
+
+            const renderStep3 = () => {
+                const handlePlateCountChange = (e) => {
+                    const count = parseInt(e.target.value) || 1;
+                    const newPlates = [...formData.plates];
+                    if (count > newPlates.length) {
+                        for (let i = newPlates.length; i < count; i++) {
+                            newPlates.push({ id: Date.now().toString() + i, partsInPlate: 1, parts: [{ partId: '', qty: '' }], timeH: '', timeM: '', plateQty: '1' });
+                        }
+                    } else if (count < newPlates.length) {
+                        newPlates.splice(count);
+                    }
+                    setFormData({ ...formData, plateCount: count, plates: newPlates });
+                };
+
+                const updatePlate = (pIndex, field, value) => {
+                    const newPlates = [...formData.plates];
+                    if (field === 'partsInPlate') {
+                        const count = parseInt(value) || 1;
+                        const newParts = [...newPlates[pIndex].parts];
+                        if (count > newParts.length) {
+                            for (let i = newParts.length; i < count; i++) newParts.push({ partId: '', qty: '' });
+                        } else {
+                            newParts.splice(count);
+                        }
+                        newPlates[pIndex].parts = newParts;
+                        newPlates[pIndex].partsInPlate = count;
+                    } else {
+                        newPlates[pIndex][field] = value;
+                    }
+                    setFormData({ ...formData, plates: newPlates });
+                };
+
+                const updatePlatePart = (pIndex, ppIndex, field, value) => {
+                    const newPlates = [...formData.plates];
+                    newPlates[pIndex].parts[ppIndex][field] = value;
+                    setFormData({ ...formData, plates: newPlates });
+                };
+
+                const validParts = formData.parts.filter(p => p.name.trim() !== '');
+
+                return (
+                    <div className="space-y-6 animate-fade-in">
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                            <label className="block text-sm font-semibold text-slate-700 mb-2">NUMBER OF PLATES / PRINT JOBS</label>
+                            <select value={formData.plateCount} onChange={handlePlateCountChange} className="w-full max-w-xs p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none bg-white">
+                                {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                            </select>
+                        </div>
+
+                        {formData.plates.map((plate, pIndex) => (
+                            <div key={plate.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden">
+                                <div className="absolute top-0 left-0 w-1 h-full bg-slate-400"></div>
+                                <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
+                                    <h3 className="text-lg font-bold text-slate-800">PLATE {String(pIndex + 1).padStart(2, '0')}</h3>
+                                    <div className="flex items-center gap-3">
+                                        <label className="text-xs font-semibold text-slate-500">PARTS IN THIS PLATE:</label>
+                                        <select value={plate.partsInPlate} onChange={e => updatePlate(pIndex, 'partsInPlate', e.target.value)} className="p-1.5 text-sm border border-slate-300 rounded outline-none bg-white">
+                                            {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4 mb-6">
+                                    {plate.parts.map((pp, ppIndex) => (
+                                        <div key={ppIndex} className="flex gap-4 items-start">
+                                            <div className="flex-1">
+                                                <label className="block text-xs font-semibold text-slate-500 mb-1">SELECT PART</label>
+                                                <select value={pp.partId} onChange={e => updatePlatePart(pIndex, ppIndex, 'partId', e.target.value)}
+                                                    className={`w-full p-2.5 text-sm border rounded-lg outline-none bg-white ${errors[`plate_${pIndex}_part_${ppIndex}_id`] ? 'border-red-500' : 'border-slate-300'}`}>
+                                                    <option value="">Choose part...</option>
+                                                    {validParts.map(p => <option key={p.id} value={p.id}>{p.name} ({db.FILAMENTS.find(f=>f.id===p.filamentId)?.type})</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="w-32">
+                                                <label className="block text-xs font-semibold text-slate-500 mb-1">QTY / PLATE</label>
+                                                <input type="number" min="1" value={pp.qty} onChange={e => updatePlatePart(pIndex, ppIndex, 'qty', e.target.value)}
+                                                    className={`w-full p-2.5 text-sm border rounded-lg outline-none ${errors[`plate_${pIndex}_part_${ppIndex}_qty`] ? 'border-red-500' : 'border-slate-300'}`} placeholder="Qty" />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-500 mb-1">PRINT TIME</label>
+                                        <div className="flex gap-2">
+                                            <div className="flex-1 flex items-center gap-1">
+                                                <input type="number" min="0" value={plate.timeH} onChange={e => updatePlate(pIndex, 'timeH', e.target.value)}
+                                                    className={`w-full p-2 text-sm border rounded-lg outline-none ${errors[`plate_${pIndex}_time`] ? 'border-red-500' : 'border-slate-300'}`} placeholder="Hrs" />
+                                                <span className="text-xs text-slate-400">h</span>
+                                            </div>
+                                            <div className="flex-1 flex items-center gap-1">
+                                                <input type="number" min="0" max="59" value={plate.timeM} onChange={e => updatePlate(pIndex, 'timeM', e.target.value)}
+                                                    className={`w-full p-2 text-sm border rounded-lg outline-none ${errors[`plate_${pIndex}_time`] ? 'border-red-500' : 'border-slate-300'}`} placeholder="Min" />
+                                                <span className="text-xs text-slate-400">m</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div></div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-500 mb-1">NUMBER OF PLATES TO PRINT</label>
+                                        <input type="number" min="1" value={plate.plateQty} onChange={e => updatePlate(pIndex, 'plateQty', e.target.value)}
+                                            className={`w-full p-2.5 text-sm border rounded-lg outline-none ${errors[`plate_${pIndex}_qty`] ? 'border-red-500' : 'border-slate-300'}`} />
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                );
+            };
+
+            const renderStep4 = () => {
+                const updateComponent = (index, field, value) => {
+                    const newComps = [...formData.components];
+                    newComps[index][field] = value;
+                    setFormData({ ...formData, components: newComps });
+                };
+
+                const removeComponent = (index) => {
+                    const newComps = formData.components.filter((_, i) => i !== index);
+                    if (newComps.length === 0) newComps.push({ id: Date.now().toString(), compId: '', qty: '' });
+                    setFormData({ ...formData, components: newComps });
+                };
+
+                return (
+                    <div className="space-y-6 animate-fade-in">
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                            <h2 className="text-xl font-bold text-brand-900 mb-2">Optional / Additional Components</h2>
+                            <p className="text-sm text-slate-500 mb-6">Select any extra hardware needed for this product. New rows appear automatically.</p>
+                            
+                            <div className="space-y-4">
+                                {formData.components.map((comp, index) => (
+                                    <div key={comp.id} className="flex gap-4 items-center">
+                                        <div className="flex-1">
+                                            <label className={`block text-xs font-semibold mb-1 ${index === 0 ? 'text-slate-500' : 'sr-only'}`}>COMPONENT {String(index+1).padStart(2, '0')}</label>
+                                            <select value={comp.compId} onChange={e => updateComponent(index, 'compId', e.target.value)}
+                                                className="w-full p-3 text-sm border border-slate-300 rounded-lg outline-none bg-white">
+                                                <option value="">Select component...</option>
+                                                {db.COMPONENTS.filter(c => c.category?.toUpperCase() !== 'SERVICES').map(c => (
+                                                    <option key={c.id} value={c.id}>{c.name} - {c.specification} (RM {c.price.toFixed(2)}/{c.unit})</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="w-32">
+                                            <label className={`block text-xs font-semibold mb-1 ${index === 0 ? 'text-slate-500' : 'sr-only'}`}>QUANTITY</label>
+                                            <input type="number" min="1" value={comp.qty} onChange={e => updateComponent(index, 'qty', e.target.value)} disabled={!comp.compId}
+                                                className={`w-full p-3 text-sm border rounded-lg outline-none disabled:bg-slate-50 disabled:border-slate-200 ${errors[`comp_${index}_qty`] ? 'border-red-500' : 'border-slate-300'}`} placeholder="Qty" />
+                                        </div>
+                                        <div className={`pt-${index === 0 ? '6' : '0'}`}>
+                                            {index < formData.components.length - 1 && (
+                                                <button onClick={() => removeComponent(index)} className="p-3 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                                    <IconTrash />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const renderStep5 = () => {
+                return (
+                    <div className="space-y-6 animate-fade-in">
+                        <div className="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden">
+                            <div className="bg-brand-900 text-white p-8 text-center border-b-4 border-brand-500">
+                                <h2 className="text-3xl font-bold tracking-tight">3D PRINT QUOTATION</h2>
+                                <p className="text-brand-100 mt-2 uppercase tracking-widest text-sm">RAKA-CHI CALCULATE</p>
+                            </div>
+
+                            <div className="p-8 space-y-8">
+                                <div>
+                                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 border-b pb-2">Product Information</h3>
+                                    <div className="grid grid-cols-2 gap-y-4 text-sm">
+                                        <div className="text-slate-500">Product Name</div>
+                                        <div className="font-semibold text-slate-800 text-right">{formData.productName || 'Unnamed Product'}</div>
+                                        
+                                        <div className="text-slate-500">Number of Parts</div>
+                                        <div className="font-semibold text-slate-800 text-right">{formData.parts.length}</div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 border-b pb-2">Printing Configuration</h3>
+                                    <div className="space-y-4">
+                                        {quotation.plateDetailsUI.map((ui, i) => {
+                                            const plate = ui.originalPlate;
+                                            return (
+                                                <div key={i} className="text-sm border border-slate-100 p-4 rounded-lg bg-slate-50/50">
+                                                    <div className="flex justify-between font-bold text-slate-800 mb-2">
+                                                        <span>PLATE {String(ui.plateIndex+1).padStart(2, '0')}</span>
+                                                        <span>Print x{plate.plateQty}</span>
+                                                    </div>
+                                                    <div className="pl-2 border-l-2 border-brand-500 mb-3 space-y-1">
+                                                        {plate.parts.map((pp, pi) => {
+                                                            const pInfo = formData.parts.find(p => p.id === pp.partId);
+                                                            return pInfo ? (
+                                                                <div key={pi} className="flex justify-between text-slate-700">
+                                                                    <span>{pInfo.name}</span>
+                                                                    <span>x{pp.qty}</span>
+                                                                </div>
+                                                            ) : null;
+                                                        })}
+                                                    </div>
+                                                    
+                                                    <div className="bg-brand-50 border border-brand-100 p-3 rounded flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+                                                        <span className="font-bold text-brand-800 uppercase">{ui.statusText} (RM{ui.effectiveRate.toFixed(2)})</span>
+                                                        <div className="text-slate-500 flex gap-4 text-xs font-medium">
+                                                            <span>Total Filament: {ui.totalWeight.toFixed(1)}g</span>
+                                                            <span>Time per plate: {plate.timeH || '0'}h {plate.timeM || '0'}m</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+
+                                <div className="bg-brand-50 p-6 rounded-xl border border-brand-100">
+                                    <h3 className="text-sm font-bold text-brand-800 uppercase tracking-wider mb-4 border-b border-brand-200 pb-2">Cost Breakdown (Selling Price)</h3>
+                                    
+                                    <div className="space-y-3 text-sm mb-6">
+                                        {quotation.plateBreakdowns.map((pb, idx) => (
+                                            <div key={`pb-${idx}`} className="flex justify-between items-center text-slate-700">
+                                                <span>{pb.name} {pb.detail}</span>
+                                                <span className="font-semibold text-slate-800">RM {pb.total.toFixed(2)}</span>
+                                            </div>
+                                        ))}
+                                        
+                                        {quotation.componentBreakdowns.map((cb, idx) => (
+                                            <div key={`cb-${idx}`} className="flex justify-between items-center text-slate-700">
+                                                <span>{cb.name} {cb.detail}</span>
+                                                <span className="font-semibold text-slate-800">RM {cb.total.toFixed(2)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    
+                                    <div className="p-4 bg-white rounded-lg shadow-sm flex justify-between items-center border border-brand-100">
+                                        <span className="font-bold text-slate-700">SELLING PRICE / BATCH</span>
+                                        <span className="text-2xl font-bold text-brand-600">RM {quotation.sellingPricePerUnit.toFixed(2)}</span>
+                                    </div>
+                                </div>
+
+                                <div className="pt-6 border-t">
+                                    <label className="block text-sm font-bold text-slate-700 mb-3 text-center">HOW MANY BATCHES DO YOU WANT TO ORDER?</label>
+                                    <div className="flex max-w-sm mx-auto items-center">
+                                        <input type="number" min="1" value={formData.orderQty} onChange={e => setFormData({...formData, orderQty: e.target.value})}
+                                            className="w-full text-center text-lg p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none" />
+                                    </div>
+                                    
+                                    <div className="mt-6 text-center">
+                                        <p className="text-sm text-slate-500 uppercase tracking-widest font-semibold mb-1">TOTAL ESTIMATED PRICE</p>
+                                        <p className="text-4xl font-bold text-brand-900">RM {quotation.totalEstimatedPrice.toFixed(2)}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="min-h-screen flex flex-col pb-24">
+                    <Header onRefresh={fetchDatabase} isRefreshing={isRefreshing} />
+                    <main className="flex-grow max-w-4xl mx-auto w-full px-4 sm:px-6 relative z-0">
+                        <Stepper currentStep={currentStep} />
+                        <div className="mb-8">
+                            {currentStep === 1 && renderStep1()}
+                            {currentStep === 2 && renderStep2()}
+                            {currentStep === 3 && renderStep3()}
+                            {currentStep === 4 && renderStep4()}
+                            {currentStep === 5 && renderStep5()}
+                        </div>
+                    </main>
+
+                    <div className="fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-50 p-4">
+                        <div className="max-w-4xl mx-auto flex justify-between items-center">
+                            <button onClick={prevStep}
+                                className={`flex items-center gap-2 px-6 py-3 font-semibold rounded-xl transition-all ${currentStep === 1 ? 'opacity-0 pointer-events-none' : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200'}`}
+                            >
+                                <IconChevronLeft /> BACK
+                            </button>
+                            
+                            {currentStep < 5 && (
+                                <button onClick={nextStep}
+                                    className="flex items-center gap-2 px-8 py-3 font-bold text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800 rounded-xl shadow-md hover:shadow-lg transition-all"
+                                >
+                                    {currentStep === 4 ? 'CALCULATE PRICE' : 'NEXT'} <IconChevronRight />
+                                </button>
+                            )}
+                            
+                            {currentStep === 5 && (
+                                <button onClick={() => alert('Order calculation completed. Ready for submission!')}
+                                    className="flex items-center gap-2 px-8 py-3 font-bold text-white bg-green-600 hover:bg-green-700 active:bg-green-800 rounded-xl shadow-md hover:shadow-lg transition-all"
+                                >
+                                    SAVE QUOTATION <IconCheck />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
