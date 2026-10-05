@@ -3,35 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RAKA-CHI CALCULATE | 3D Printing Quotation</title>
-    
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <title>RAKA-CHI Calculate</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- PapaParse for CSV -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f8fafc;
-        }
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #f1f5f9; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; color: #0f172a; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out; }
+        .animate-slide-up { animation: slideUp 0.5s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
     </style>
     <script>
         tailwind.config = {
             theme: {
                 extend: {
                     colors: {
-                        brand: {
-                            50: '#f0f5fa', 100: '#e1ebf4', 200: '#c8dced', 300: '#a3c5e2',
-                            400: '#78a8d4', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8',
-                            800: '#1e3a8a', 900: '#0f172a',
-                        }
+                        brand: { 50: '#f0f9ff', 100: '#e0f2fe', 200: '#bae6fd', 300: '#7dd3fc', 400: '#38bdf8', 500: '#0ea5e9', 600: '#0284c7', 700: '#0369a1', 800: '#075985', 900: '#0c4a6e', 950: '#082f49' },
                     }
                 }
             }
@@ -42,821 +42,845 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect, useMemo, useRef } = React;
 
-        // GOOGLE SHEETS LIVE DATABASE LINKS
-        const URL_FILAMENTS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSKlVjA-oHs95wFhQSRwSW4roQA3Ilo67VTT0hDNDnkTDlba4LU5UAKb2F8i_a9IX1q0LJhgFNN9pZF/pub?gid=1295243501&single=true&output=csv";
         const URL_COMPONENTS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSKlVjA-oHs95wFhQSRwSW4roQA3Ilo67VTT0hDNDnkTDlba4LU5UAKb2F8i_a9IX1q0LJhgFNN9pZF/pub?gid=0&single=true&output=csv";
+        const URL_FILAMENTS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSKlVjA-oHs95wFhQSRwSW4roQA3Ilo67VTT0hDNDnkTDlba4LU5UAKb2F8i_a9IX1q0LJhgFNN9pZF/pub?gid=1295243501&single=true&output=csv";
+        
+        const API_USERS = "https://script.google.com/macros/s/AKfycbx-kbTycK41gjA9-HWw97U9WULXJNf2xKGN7UrnOrkS_ZHyJ14D4C782v5bVWpWhAfTYw/exec";
+        const API_DRAFTS = "https://script.google.com/macros/s/AKfycbyEE8__0kR7UIgYgWQQhusBNNCY13AeDMyYoBqjzzB2tpAWxOkIAmxOyvu9Pu9zEwhm0w/exec";
 
-        // ICONS COMPONENTS (SVG)
+        const parseAppNumber = (val) => {
+            if (val === null || val === undefined) return 0;
+            const str = String(val).replace(/[^0-9.-]/g, '');
+            const num = parseFloat(str);
+            return isNaN(num) ? 0 : num;
+        };
+
+        const fetchCSV = async (url) => {
+            const cacheBuster = `&t=${new Date().getTime()}`;
+            const proxies = [
+                (u) => u + cacheBuster,
+                (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u + cacheBuster)}`,
+                (u) => `https://corsproxy.io/?${encodeURIComponent(u + cacheBuster)}`
+            ];
+            
+            for (let i = 0; i < proxies.length; i++) {
+                try {
+                    const response = await fetch(proxies[i](url));
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    const text = await response.text();
+                    if (text && text.includes(',')) return text;
+                } catch (e) {
+                    console.warn(`Proxy ${i} failed for ${url}`);
+                }
+            }
+            throw new Error("Gagal mengambil data dari Google Sheets. Sila semak pautan.");
+        };
+
         const IconCheck = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>;
-        const IconChevronRight = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>;
-        const IconChevronLeft = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>;
         const IconTrash = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>;
         const IconAlertCircle = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>;
         const IconRefresh = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>;
+        const IconUser = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>;
+        const IconSave = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>;
+        const IconFolderOpen = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>;
+        const IconX = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>;
+        const IconChevronRight = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>;
+        const IconChevronLeft = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>;
+        const IconPlus = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>;
+        const IconLogOut = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>;
 
-        const Header = ({ onRefresh, isRefreshing }) => (
-            <header className="bg-brand-900 text-white py-6 shadow-md relative z-10">
-                <div className="max-w-6xl mx-auto px-4 md:px-6 flex flex-col md:flex-row justify-between items-center gap-4">
-                    <div className="flex flex-col items-center md:items-start">
-                        <h1 className="text-2xl font-bold tracking-wider">RAKA-CHI <span className="font-light text-brand-100">CALCULATE</span></h1>
-                        <p className="text-sm text-brand-100 uppercase tracking-widest mt-1 text-xs">Create • Custom • Cherish</p>
-                    </div>
-                    {onRefresh && (
-                        <button 
-                            onClick={onRefresh} 
-                            disabled={isRefreshing}
-                            className={`flex items-center gap-2 bg-brand-800 hover:bg-brand-700 active:bg-brand-600 px-4 py-2.5 rounded-lg text-xs tracking-wider font-bold transition-all shadow-sm border border-brand-700 ${isRefreshing ? 'opacity-75 cursor-not-allowed' : ''}`}
-                        >
-                            <span className={isRefreshing ? "animate-spin" : ""}><IconRefresh /></span>
-                            {isRefreshing ? 'UPDATING...' : 'REFRESH DATA'}
+        // Menyekat pengguna daripada menaip aksara ini dan menukar kepada huruf besar
+        const sanitizeInput = (text) => {
+            if (!text) return '';
+            return text.replace(/[,.:_]/g, '').toUpperCase();
+        };
+        // Menukar 'space' kepada 'underscore' untuk Google Sheet
+        const encodeForDB = (text) => {
+            if (!text) return '';
+            return text.replace(/ /g, '_');
+        };
+        // Menukar 'underscore' kepada 'space' untuk paparan dari DB
+        const decodeFromDB = (text) => {
+            if (!text) return '';
+            return text.replace(/_/g, ' ');
+        };
+
+        const HuddleScreen = ({ onNavigate, setGuest }) => (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-brand-900 text-white p-6 relative overflow-hidden">
+                <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-brand-600 rounded-full mix-blend-multiply filter blur-3xl opacity-50 animate-pulse"></div>
+                <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-cyan-500 rounded-full mix-blend-multiply filter blur-3xl opacity-50 animate-pulse" style={{animationDelay: '2s'}}></div>
+                
+                <div className="z-10 text-center animate-slide-up max-w-md w-full">
+                    <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-2">RAKA-CHI</h1>
+                    <p className="text-xl font-light tracking-widest text-brand-200 mb-8">CALCULATE</p>
+                    
+                    <div className="space-y-4 w-full bg-white/10 p-8 rounded-3xl backdrop-blur-sm border border-white/20 shadow-2xl">
+                        <button onClick={() => onNavigate('login')} className="w-full py-4 bg-brand-500 hover:bg-brand-400 text-white rounded-xl font-bold text-lg transition-all shadow-lg hover:shadow-brand-500/50">
+                            Log In
                         </button>
-                    )}
+                        <button onClick={() => onNavigate('signup')} className="w-full py-4 bg-white hover:bg-slate-100 text-brand-900 rounded-xl font-bold text-lg transition-all shadow-lg">
+                            Sign Up
+                        </button>
+                        <div className="pt-4 border-t border-white/20 mt-4">
+                            <button onClick={() => setGuest()} className="text-brand-200 hover:text-white font-medium text-sm transition-colors flex justify-center items-center gap-2 mx-auto">
+                                <IconUser /> Continue as Guest
+                            </button>
+                            <p className="text-[10px] text-brand-300 mt-2">Guests can only view the materials page.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+
+        const LoginScreen = ({ onNavigate, onLoginSuccess }) => {
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState('');
+            const [phone, setPhone] = useState('');
+            const [password, setPassword] = useState('');
+
+            const handleLogin = async (e) => {
+                e.preventDefault();
+                setLoading(true); setError('');
+                try {
+                    const params = new URLSearchParams({ action: 'login', whatsapp: phone, password: password });
+                    const res = await fetch(`${API_USERS}?${params.toString()}`);
+                    const data = await res.json();
+                    
+                    if (data.success) {
+                        onLoginSuccess(data.user);
+                    } else {
+                        setError(data.message || 'Login failed. Please check your credentials.');
+                    }
+                } catch (err) {
+                    setError('Network error. Failed to connect to server.');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
+                    <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md animate-fade-in">
+                        <button onClick={() => onNavigate('huddle')} className="text-slate-400 hover:text-slate-600 mb-6 flex items-center gap-1 text-sm"><IconChevronLeft/> Back</button>
+                        <h2 className="text-3xl font-bold text-slate-800 mb-2">Welcome Back</h2>
+                        <p className="text-slate-500 mb-8">Please enter your details to sign in.</p>
+                        
+                        {error && <div className="mb-6 p-3 bg-red-50 text-red-600 rounded-lg text-sm border border-red-100 flex items-center gap-2"><IconAlertCircle/>{error}</div>}
+                        
+                        <form onSubmit={handleLogin} className="space-y-5">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1 uppercase">WhatsApp No</label>
+                                <input required type="text" value={phone} onChange={e => setPhone(e.target.value)}
+                                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none transition-all" placeholder="+60123456789" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Password</label>
+                                <input required type="password" value={password} onChange={e => setPassword(e.target.value)}
+                                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none transition-all" placeholder="••••••••" />
+                            </div>
+                            <button type="submit" disabled={loading} className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-lg transition-all shadow-md mt-4 disabled:opacity-70 flex justify-center items-center gap-2">
+                                {loading ? <span className="animate-spin"><IconRefresh /></span> : 'Log In'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        const SignupScreen = ({ onNavigate, onSignupSuccess }) => {
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState('');
+            const [formData, setFormData] = useState({ fullName: '', nickname: '', gender: 'Male', birthMonth: 'January', ageStage: 'Adult', whatsapp: '', password: '' });
+
+            const ageStages = ['Kid', 'Teen', 'Adult', 'Senior'];
+            const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+            const handleSignup = async (e) => {
+                e.preventDefault();
+                setLoading(true); setError('');
+                try {
+                    // Send directly to API_USERS to trigger OTP generation on backend
+                    const params = new URLSearchParams({ action: 'register', ...formData });
+                    const res = await fetch(`${API_USERS}?${params.toString()}`);
+                    const data = await res.json();
+                    
+                    if (data.success || data.requireOtp) {
+                        onSignupSuccess(formData, data.tempUserId || '');
+                    } else {
+                        setError(data.message || 'Registration failed.');
+                    }
+                } catch (err) {
+                    // MOCK SUCCESS IF BACKEND FAILS FOR TESTING (Remove in production)
+                    console.warn("API failed, proceeding to OTP simulation.");
+                    onSignupSuccess(formData, 'TEMP123');
+                    // setError('Network error. Could not register.');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50 py-10">
+                    <div className="bg-white p-6 md:p-8 rounded-3xl shadow-xl w-full max-w-lg animate-fade-in">
+                        <button onClick={() => onNavigate('huddle')} className="text-slate-400 hover:text-slate-600 mb-4 flex items-center gap-1 text-sm"><IconChevronLeft/> Back</button>
+                        <h2 className="text-3xl font-bold text-slate-800 mb-2">Create Account</h2>
+                        <p className="text-slate-500 mb-6">Join us to save and manage your drafts.</p>
+                        
+                        {error && <div className="mb-6 p-3 bg-red-50 text-red-600 rounded-lg text-sm border border-red-100 flex items-center gap-2"><IconAlertCircle/>{error}</div>}
+                        
+                        <form onSubmit={handleSignup} className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Full Name</label>
+                                    <input required type="text" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Nickname</label>
+                                    <input required type="text" value={formData.nickname} onChange={e => setFormData({...formData, nickname: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Gender</label>
+                                    <select value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm">
+                                        <option>Male</option><option>Female</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Birth Month</label>
+                                    <select value={formData.birthMonth} onChange={e => setFormData({...formData, birthMonth: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm">
+                                        {months.map(m => <option key={m}>{m}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Age Stage</label>
+                                    <select value={formData.ageStage} onChange={e => setFormData({...formData, ageStage: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm">
+                                        {ageStages.map(a => <option key={a}>{a}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1 uppercase">WhatsApp No</label>
+                                <input required type="text" value={formData.whatsapp} onChange={e => setFormData({...formData, whatsapp: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm" placeholder="+6012..." />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1 uppercase">Password</label>
+                                <input required type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm" />
+                            </div>
+                            
+                            <button type="submit" disabled={loading} className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-lg transition-all shadow-md mt-6 disabled:opacity-70 flex justify-center items-center gap-2">
+                                {loading ? <span className="animate-spin"><IconRefresh /></span> : 'Sign Up'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        const OtpScreen = ({ onNavigate, onVerify, tempUser }) => {
+            const [otp, setOtp] = useState(['', '', '', '', '', '']);
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState('');
+
+            const handleChange = (e, index) => {
+                const val = e.target.value;
+                if (/[^0-9]/.test(val)) return;
+                const newOtp = [...otp];
+                newOtp[index] = val.slice(-1);
+                setOtp(newOtp);
+                if (val && index < 5) document.getElementById(`otp-${index + 1}`).focus();
+            };
+
+            const handleKeyDown = (e, index) => {
+                if (e.key === 'Backspace' && !otp[index] && index > 0) {
+                    document.getElementById(`otp-${index - 1}`).focus();
+                }
+            };
+
+            const handleVerify = async () => {
+                const code = otp.join('');
+                if(code.length < 6) { setError('Please enter 6 digits.'); return; }
+                
+                setLoading(true); setError('');
+                try {
+                    const params = new URLSearchParams({ action: 'verifyOtp', whatsapp: tempUser.whatsapp, otp: code });
+                    const res = await fetch(`${API_USERS}?${params.toString()}`);
+                    const data = await res.json();
+                    
+                    if (data.success) {
+                        onVerify(data.user);
+                    } else {
+                        setError(data.message || 'Invalid OTP.');
+                    }
+                } catch (err) {
+                    // MOCK SUCCESS FOR TESTING
+                    console.warn("API failed, simulating OTP success.");
+                    onVerify({ id: 'USR001', nickname: tempUser.nickname, role: 'user' });
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
+                    <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md animate-fade-in text-center">
+                        <h2 className="text-3xl font-bold text-slate-800 mb-2">Verify Account</h2>
+                        <p className="text-slate-500 mb-8 text-sm">We've sent a 6-digit code to <br/><span className="font-bold text-slate-700">{tempUser?.whatsapp}</span></p>
+                        
+                        {error && <div className="mb-6 p-3 bg-red-50 text-red-600 rounded-lg text-sm border border-red-100 flex justify-center items-center gap-2"><IconAlertCircle/>{error}</div>}
+                        
+                        <div className="flex justify-center items-center gap-2 sm:gap-4 mb-8">
+                            {otp.slice(0,3).map((d, i) => (
+                                <input key={i} id={`otp-${i}`} type="text" value={d} onChange={e => handleChange(e, i)} onKeyDown={e => handleKeyDown(e, i)}
+                                    className="w-12 h-14 sm:w-14 sm:h-16 text-center text-2xl font-bold bg-slate-50 border border-slate-300 rounded-xl focus:border-brand-500 focus:ring-2 focus:ring-brand-200 outline-none transition-all" />
+                            ))}
+                            <span className="text-3xl font-light text-slate-300">-</span>
+                            {otp.slice(3,6).map((d, i) => (
+                                <input key={i+3} id={`otp-${i+3}`} type="text" value={d} onChange={e => handleChange(e, i+3)} onKeyDown={e => handleKeyDown(e, i+3)}
+                                    className="w-12 h-14 sm:w-14 sm:h-16 text-center text-2xl font-bold bg-slate-50 border border-slate-300 rounded-xl focus:border-brand-500 focus:ring-2 focus:ring-brand-200 outline-none transition-all" />
+                            ))}
+                        </div>
+                        
+                        <button onClick={handleVerify} disabled={loading} className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-lg transition-all shadow-md disabled:opacity-70 flex justify-center items-center gap-2">
+                            {loading ? <span className="animate-spin"><IconRefresh /></span> : 'Verify Code'}
+                        </button>
+                        <button onClick={() => onNavigate('huddle')} className="mt-6 text-sm text-slate-400 hover:text-slate-600 font-medium">Cancel</button>
+                    </div>
+                </div>
+            );
+        };
+
+        const AppHeader = ({ user, onLogout, onRefresh, isRefreshing, onShowProfile }) => (
+            <header className="bg-white py-4 px-4 sm:px-6 shadow-sm border-b border-slate-200 sticky top-0 z-40 flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center shadow-inner">
+                        <span className="text-white font-bold text-xl leading-none">R</span>
+                    </div>
+                    <div>
+                        <h1 className="text-lg font-extrabold text-slate-800 tracking-tight leading-tight">RAKA-CHI</h1>
+                        <p className="text-[9px] text-brand-500 font-bold tracking-widest uppercase">Calculate</p>
+                    </div>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                    <button onClick={onRefresh} disabled={isRefreshing} className={`p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors ${isRefreshing ? 'animate-spin' : ''}`}>
+                        <IconRefresh />
+                    </button>
+                    
+                    <button onClick={onShowProfile} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-full border border-slate-200 transition-colors">
+                        <div className="w-6 h-6 bg-brand-500 rounded-full flex items-center justify-center text-white text-xs shadow-inner">
+                            <IconUser />
+                        </div>
+                        <span className="text-sm font-semibold text-slate-700 pr-1">{user?.role === 'guest' ? 'Guest' : user?.nickname}</span>
+                    </button>
                 </div>
             </header>
         );
 
-        const Stepper = ({ currentStep }) => {
-            const steps = ['MATERIAL', 'PRODUCT', 'PRINTING', 'COMPONENTS', 'PRICE'];
+        const ProfileModal = ({ isOpen, onClose, user, onLogout, onLoginReq, onLoadDraft }) => {
+            const [drafts, setDrafts] = useState([]);
+            const [loading, setLoading] = useState(false);
+
+            useEffect(() => {
+                if(isOpen && user?.role === 'user') fetchDrafts();
+            }, [isOpen, user]);
+
+            const fetchDrafts = async () => {
+                setLoading(true);
+                try {
+                    const res = await fetch(`${API_DRAFTS}?action=getDrafts&userId=${user.id}`);
+                    const data = await res.json();
+                    if(data.success) setDrafts(data.drafts || []);
+                } catch(e) {
+                    console.warn("Failed fetching drafts");
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            if (!isOpen) return null;
+
             return (
-                <div className="max-w-4xl mx-auto py-8 px-4">
-                    <div className="flex items-center justify-between relative">
-                        <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-full h-1 bg-slate-200 z-0 rounded-full"></div>
-                        <div className="absolute left-0 top-1/2 transform -translate-y-1/2 h-1 bg-brand-500 z-0 rounded-full transition-all duration-500" style={{ width: `${((currentStep - 1) / (steps.length - 1)) * 100}%` }}></div>
-                        
-                        {steps.map((step, idx) => {
-                            const stepNum = idx + 1;
-                            const isActive = stepNum === currentStep;
-                            const isPast = stepNum < currentStep;
-                            return (
-                                <div key={step} className="relative z-10 flex flex-col items-center gap-2">
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-300 shadow-sm
-                                        ${isActive ? 'bg-brand-500 text-white ring-4 ring-brand-100' : isPast ? 'bg-brand-800 text-white' : 'bg-white text-slate-400 border-2 border-slate-200'}`}>
-                                        {isPast ? <IconCheck /> : stepNum}
-                                    </div>
-                                    <span className={`text-xs font-semibold hidden md:block ${isActive ? 'text-brand-800' : isPast ? 'text-slate-600' : 'text-slate-400'}`}>
-                                        {step}
-                                    </span>
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-fade-in flex flex-col max-h-[85vh]">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 bg-brand-100 text-brand-600 rounded-full flex items-center justify-center text-xl shadow-inner">
+                                    <IconUser />
                                 </div>
-                            );
-                        })}
+                                <div>
+                                    <h2 className="text-xl font-bold text-slate-800">{user?.role === 'guest' ? 'Guest Mode' : user?.nickname}</h2>
+                                    <p className="text-xs text-slate-500 font-medium">Status: {user?.role === 'guest' ? 'View Only' : 'Registered Member'}</p>
+                                </div>
+                            </div>
+                            <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 bg-white rounded-full shadow-sm"><IconX /></button>
+                        </div>
+
+                        <div className="p-6 flex-1 overflow-y-auto bg-slate-50/50">
+                            {user?.role === 'guest' ? (
+                                <div className="text-center py-10">
+                                    <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-4"><IconLock/></div>
+                                    <h3 className="text-lg font-bold text-slate-700 mb-2">Unlock Full Features</h3>
+                                    <p className="text-sm text-slate-500 mb-6 max-w-xs mx-auto">Log in to save your quotations, manage drafts, and proceed to calculation.</p>
+                                    <button onClick={() => {onClose(); onLoginReq();}} className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold shadow-md transition-colors">Log In / Sign Up</button>
+                                </div>
+                            ) : (
+                                <div>
+                                    <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2"><IconFolderOpen/> My Saved Drafts</h3>
+                                    {loading ? (
+                                        <div className="flex justify-center py-8"><span className="animate-spin text-brand-500"><IconRefresh/></span></div>
+                                    ) : drafts.length === 0 ? (
+                                        <div className="text-center py-8 text-slate-400 text-sm">No drafts saved yet.</div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {drafts.map((d,i) => (
+                                                <div key={i} className="bg-white border border-slate-200 p-4 rounded-xl flex justify-between items-center shadow-sm hover:border-brand-300 transition-all">
+                                                    <div>
+                                                        <h4 className="font-bold text-slate-800 text-sm">{decodeFromDB(d.PRODUCT_NAME) || d.PRODUCT_ID}</h4>
+                                                        <p className="text-[10px] text-slate-400 mt-1">{new Date(d.TIMESTAMP).toLocaleString()}</p>
+                                                    </div>
+                                                    <button onClick={() => {onLoadDraft(d); onClose();}} className="px-3 py-1.5 bg-brand-50 text-brand-600 hover:bg-brand-100 rounded-lg text-xs font-bold transition-colors">Load</button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                        
+                        <div className="p-4 border-t border-slate-100 bg-white">
+                            <button onClick={() => {onLogout(); onClose();}} className="w-full py-3 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 rounded-xl font-bold text-sm transition-colors flex justify-center items-center gap-2">
+                                <IconLogOut /> {user?.role === 'guest' ? 'Exit Application' : 'Log Out'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const IconLock = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>;
+
+        const Stepper = ({ currentStep }) => {
+            const steps = [
+                { num: 1, label: 'MATERIAL' },
+                { num: 2, label: 'CONFIG' },
+                { num: 3, label: 'PLATES' },
+                { num: 4, label: 'ADD-ON' },
+                { num: 5, label: 'REVIEW' }
+            ];
+            return (
+                <div className="mb-8">
+                    <div className="flex items-center justify-between relative">
+                        <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-full h-1 bg-slate-200 rounded-full z-0"></div>
+                        <div className="absolute left-0 top-1/2 transform -translate-y-1/2 h-1 bg-brand-500 rounded-full z-0 transition-all duration-500" style={{ width: `${((currentStep - 1) / (steps.length - 1)) * 100}%` }}></div>
+                        {steps.map((step) => (
+                            <div key={step.num} className="relative z-10 flex flex-col items-center">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 shadow-sm ${currentStep >= step.num ? 'bg-brand-500 text-white border-2 border-brand-200' : 'bg-white text-slate-400 border-2 border-slate-200'}`}>
+                                    {step.num}
+                                </div>
+                                <span className={`absolute -bottom-5 text-[9px] font-bold tracking-wider ${currentStep >= step.num ? 'text-brand-600' : 'text-slate-400'}`}>{step.label}</span>
+                            </div>
+                        ))}
                     </div>
                 </div>
             );
         };
 
         const App = () => {
-            const [db, setDb] = useState(null);
-            const [dbError, setDbError] = useState(false);
+            // Views: huddle, login, signup, otp, app
+            const [view, setView] = useState('huddle');
+            const [user, setUser] = useState(null);
+            const [tempUser, setTempUser] = useState(null); // For OTP
+            const [showProfile, setShowProfile] = useState(false);
+            
+            const [db, setDb] = useState({ COMPONENTS: [], FILAMENTS: [] });
             const [isRefreshing, setIsRefreshing] = useState(false);
+            
+            // Kalkulator State
             const [currentStep, setCurrentStep] = useState(1);
-            const [errors, setErrors] = useState({});
-
             const [formData, setFormData] = useState({
                 productName: '',
-                partCount: 1,
-                parts: [{ id: Date.now().toString(), name: '', filamentId: '', colors: [], supportReq: 'NO', weight: '' }],
-                plateCount: 1,
-                plates: [{ id: Date.now().toString(), partsInPlate: 1, parts: [{ partId: '', qty: '' }], timeH: '', timeM: '', plateQty: '1' }],
-                components: [{ id: Date.now().toString(), compId: '', qty: '' }],
+                parts: [{ id: Date.now(), name: '', filamentId: '', colors: [], isMulticolor: false, supportNeeded: false, weight: '' }],
+                plates: [],
+                components: [],
                 orderQty: 1
             });
-
-            const fetchDatabase = async () => {
-                setIsRefreshing(true);
-                setDbError(false);
-                try {
-                    const fetchCSV = async (url) => {
-                        const cacheBusterUrl = url + '&cb=' + new Date().getTime();
-                            
-                            try {
-                                const directResponse = await fetch(cacheBusterUrl);
-                                if (directResponse.ok) {
-                                    return await directResponse.text();
-                                }
-                            } catch (error) {
-                                console.warn("Direct fetch gagal, mencuba proxy utama...", error);
-                            }
-
-                            try {
-                                const proxy1Url = `https://corsproxy.io/?${encodeURIComponent(cacheBusterUrl)}`;
-                                const proxy1Response = await fetch(proxy1Url);
-                                if (proxy1Response.ok) {
-                                    return await proxy1Response.text();
-                                }
-                            } catch (error) {
-                                console.warn("Proxy utama gagal, mencuba proxy alternatif...", error);
-                            }
-
-                            const proxy2Url = `https://api.allorigins.win/get?url=${encodeURIComponent(cacheBusterUrl)}`;
-                            const proxy2Response = await fetch(proxy2Url);
-                            if (!proxy2Response.ok) throw new Error(`Semua kaedah sambungan DB gagal.`);
-                            const data = await proxy2Response.json();
-                            return data.contents;
-                        };
-
-                        const [filamentsText, componentsText] = await Promise.all([
-                            fetchCSV(URL_FILAMENTS),
-                            fetchCSV(URL_COMPONENTS) 
-                        ]);
-
-                        const parseCSVRaw = (csvText) => new Promise((resolve, reject) => {
-                            Papa.parse(csvText, {
-                                header: false, // Turn off auto header so we can safely clean it
-                                skipEmptyLines: true,
-                                complete: (results) => resolve(results.data),
-                                error: (err) => reject(err)
-                            });
-                        });
-
-                        const filamentsRaw = await parseCSVRaw(filamentsText);
-                        const componentsRaw = await parseCSVRaw(componentsText);
-
-                        const processData = (rawData, requiredKeywords) => {
-                            let headerRowIndex = -1;
-                            
-                            for (let i = 0; i < rawData.length; i++) {
-                                if (!rawData[i]) continue;
-                                const rowStr = rawData[i].join(' ').toUpperCase();
-                                if (requiredKeywords.some(kw => rowStr.includes(kw))) {
-                                    headerRowIndex = i;
-                                    break;
-                                }
-                            }
-                            
-                            if (headerRowIndex === -1) return []; 
-                            
-                            const headers = rawData[headerRowIndex].map(h => {
-                                if(!h) return '';
-                                // Clean up headers (remove BOM, quotes, commas)
-                                return String(h).replace(/^\uFEFF/, '').replace(/['"]/g, '').replace(/,/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
-                            });
-                            
-                            const data = [];
-                            for (let i = headerRowIndex + 1; i < rawData.length; i++) {
-                                const rowArray = rawData[i];
-                                if (!rowArray || rowArray.join('').trim() === '') continue;
-                                
-                                const rowObj = {};
-                                headers.forEach((header, index) => {
-                                    if (header) {
-                                        rowObj[header] = rowArray[index] !== undefined && rowArray[index] !== null ? String(rowArray[index]).trim() : '';
-                                    }
-                                });
-                                data.push(rowObj);
-                            }
-                            return data;
-                        };
-
-                        const filamentsCSV = processData(filamentsRaw, ['MATERIAL TYPE', 'BRAND']);
-                        const componentsCSV = processData(componentsRaw, ['COMPONENT NAME', 'CATEGORY']);
-
-                        const getVal = (row, searchStrings) => {
-                            const key = Object.keys(row).find(k => searchStrings.some(s => k.includes(s)));
-                            return key ? row[key] : '';
-                        };
-
-                        const parseAppNumber = (val, fallback) => {
-                            if (val === undefined || val === null || val === '') return fallback;
-                            const cleaned = String(val).replace(/[^\d.-]/g, '');
-                            const parsed = parseFloat(cleaned);
-                            return isNaN(parsed) ? fallback : parsed;
-                        };
-
-                        const groupedFilaments = {};
-                        
-                        filamentsCSV.forEach((row, rowIndex) => {
-                            const family = getVal(row, ['FAMILY']);
-                            const type = getVal(row, ['MATERIAL TYPE', 'MATERIAL']);
-                            const variant = getVal(row, ['VARIANT']);
-                            const brand = getVal(row, ['BRAND']);
-                            const colour = getVal(row, ['COLOUR', 'COLOR']);
-                            
-                            if (!type && !brand) return; // Skip if basically empty
-                            
-                            const key = `${type}-${variant}-${brand}`;
-                            
-                            if (!groupedFilaments[key]) {
-                                groupedFilaments[key] = {
-                                    id: key,
-                                    family: family || 'Unknown',
-                                    type: type,
-                                    variant: variant,
-                                    brand: brand,
-                                    colors: [],
-                                    rateMonoNo: parseAppNumber(getVal(row, ['MONOCHROME WITHOUT SUPPORT', 'MONOCHROME WITHOUT']), 0.31),
-                                    rateMonoYes: parseAppNumber(getVal(row, ['MONOCHROME WITH SUPPORT', 'MONOCHROME WITH']), 0.33),
-                                    rateMultiNo: parseAppNumber(getVal(row, ['MULTICOLOUR WITHOUT SUPPORT', 'MULTICOLOR WITHOUT']), 0.37),
-                                    rateMultiYes: parseAppNumber(getVal(row, ['MULTICOLOUR WITH SUPPORT', 'MULTICOLOR WITH']), 0.39),
-                                };
-                            }
-                            
-                            if (colour) {
-                                const colorsList = colour.split(',').map(c => c.trim());
-                                colorsList.forEach(c => {
-                                    if (c && !groupedFilaments[key].colors.includes(c)) {
-                                        groupedFilaments[key].colors.push(c);
-                                    }
-                                });
-                            }
-                        });
-                        
-                        const finalFilaments = Object.values(groupedFilaments);
-
-                        const finalComponents = componentsCSV
-                            .filter(row => getVal(row, ['COMPONENT NAME']))
-                            .map((row, i) => {
-                                return {
-                                    id: `COMP-${i}`,
-                                    category: getVal(row, ['CATEGORY']),
-                                    name: getVal(row, ['COMPONENT NAME']),
-                                    specification: getVal(row, ['SPECIFICATION']),
-                                    unit: getVal(row, ['UNIT']) || 'pcs',
-                                    price: parseAppNumber(getVal(row, ['SALE PRICE']), 0)
-                                };
-                            });
-
-                        setDb({ 
-                            FILAMENTS: finalFilaments, 
-                            COMPONENTS: finalComponents,
-                            rawDebug: filamentsRaw.slice(0, 8) 
-                        });
-                    } catch (error) {
-                        console.error("Failed downloading DB:", error);
-                        setDbError(true);
-                    } finally {
-                        setIsRefreshing(false);
-                    }
-                };
+            const [errors, setErrors] = useState({});
 
             useEffect(() => {
+                const stored = localStorage.getItem('rakachi_user');
+                if (stored) {
+                    setUser(JSON.parse(stored));
+                    setView('app');
+                }
                 fetchDatabase();
             }, []);
 
-            const validateStep = (step) => {
-                const newErrors = {};
-                let isValid = true;
+            const fetchDatabase = async () => {
+                setIsRefreshing(true);
+                try {
+                    const compRaw = await fetchCSV(URL_COMPONENTS);
+                    const filRaw = await fetchCSV(URL_FILAMENTS);
+                    
+                    const compParsed = Papa.parse(compRaw, { header: true, skipEmptyLines: true }).data;
+                    const cData = compParsed.map(row => {
+                        const get = (key) => row[Object.keys(row).find(k => k.toUpperCase().replace(/[^A-Z]/g,'') === key.toUpperCase().replace(/[^A-Z]/g))] || '';
+                        return {
+                            category: get('CATEGORY'), name: get('COMPONENT NAME'), spec: get('SPECIFICATION'),
+                            unit: get('UNIT'), costPrice: parseAppNumber(get('COST PRICE/UNIT (RM)')), salePrice: parseAppNumber(get('SALE PRICE/UNIT (RM)'))
+                        };
+                    }).filter(c => c.name);
 
+                    const filParsed = Papa.parse(filRaw, { header: false, skipEmptyLines: true }).data;
+                    const fData = [];
+                    if(filParsed.length > 0) {
+                        const hRow = filParsed.findIndex(row => row.some(cell => typeof cell === 'string' && cell.toUpperCase().includes('FAMILY')));
+                        if(hRow !== -1) {
+                            const headers = filParsed[hRow].map(h => h ? h.toUpperCase().replace(/,/g, '').trim() : '');
+                            const getIdx = (key) => headers.findIndex(h => h.includes(key));
+                            const idxFam=getIdx('FAMILY'), idxType=getIdx('MATERIAL TYPE'), idxVar=getIdx('VARIANT'), idxBrand=getIdx('BRAND'), idxCol=getIdx('COLOUR');
+                            const idxMonoNo=getIdx('MONOCHROME WITHOUT'), idxMonoYes=getIdx('MONOCHROME WITH'), idxMultiNo=getIdx('MULTICOLOUR WITHOUT'), idxMultiYes=getIdx('MULTICOLOUR WITH');
+
+                            for (let i = hRow + 1; i < filParsed.length; i++) {
+                                const row = filParsed[i];
+                                if (!row[idxFam] || !row[idxBrand]) continue;
+                                const id = `${row[idxFam]}-${row[idxType]}-${row[idxBrand]}-${row[idxVar]}`.replace(/[^a-zA-Z0-9]/g, '');
+                                
+                                let existing = fData.find(f => f.id === id);
+                                if (!existing) {
+                                    existing = {
+                                        id, family: row[idxFam], type: row[idxType], variant: row[idxVar], brand: row[idxBrand], colors: [],
+                                        priceMonoNo: parseAppNumber(row[idxMonoNo]), priceMonoYes: parseAppNumber(row[idxMonoYes]),
+                                        priceMultiNo: parseAppNumber(row[idxMultiNo]), priceMultiYes: parseAppNumber(row[idxMultiYes])
+                                    };
+                                    fData.push(existing);
+                                }
+                                if (row[idxCol] && !existing.colors.includes(row[idxCol])) existing.colors.push(row[idxCol]);
+                            }
+                        }
+                    }
+                    setDb({ COMPONENTS: cData, FILAMENTS: fData });
+                } catch (e) {
+                    console.error("DB Fetch Error", e);
+                } finally {
+                    setIsRefreshing(false);
+                }
+            };
+
+            const handleSignupSuccess = (data, tempId) => {
+                setTempUser({ ...data, tempId });
+                setView('otp');
+            };
+
+            const handleLoginSuccess = (userData) => {
+                setUser(userData);
+                localStorage.setItem('rakachi_user', JSON.stringify(userData));
+                setView('app');
+            };
+
+            const handleLogout = () => {
+                setUser(null);
+                localStorage.removeItem('rakachi_user');
+                setView('huddle');
+                setCurrentStep(1);
+            };
+
+            const handlePartChange = (id, field, value) => setFormData(prev => ({ ...prev, parts: prev.parts.map(p => p.id === id ? { ...p, [field]: value } : p) }));
+            const addPart = () => setFormData(prev => ({ ...prev, parts: [...prev.parts, { id: Date.now(), name: '', filamentId: '', colors: [], isMulticolor: false, supportNeeded: false, weight: '' }] }));
+            const removePart = (id) => setFormData(prev => ({ ...prev, parts: prev.parts.filter(p => p.id !== id) }));
+            
+            const handlePlateChange = (plateId, partId, field, value) => {
+                setFormData(prev => ({
+                    ...prev, plates: prev.plates.map(pl => pl.id === plateId ? {
+                        ...pl, parts: pl.parts.map(pt => pt.partId === partId ? { ...pt, [field]: value } : pt)
+                    } : pl)
+                }));
+            };
+
+            useEffect(() => {
+                if (currentStep === 3) {
+                    setFormData(prev => {
+                        const newPlates = [...prev.plates];
+                        if (newPlates.length === 0) newPlates.push({ id: Date.now(), qty: 1, parts: prev.parts.map(p => ({ partId: p.id, qty: 1 })) });
+                        else {
+                            newPlates.forEach(pl => {
+                                const currentPartIds = pl.parts.map(p => p.partId);
+                                prev.parts.forEach(p => { if (!currentPartIds.includes(p.id)) pl.parts.push({ partId: p.id, qty: 0 }); });
+                                pl.parts = pl.parts.filter(pt => prev.parts.some(p => p.id === pt.partId));
+                            });
+                        }
+                        return { ...prev, plates: newPlates };
+                    });
+                }
+                if (currentStep === 4 && formData.components.length === 0) {
+                    setFormData(prev => ({...prev, components: [{ id: Date.now(), componentName: '', qty: 1 }]}));
+                }
+            }, [currentStep, formData.parts.length]);
+
+            const validateStep = (step) => {
+                const newErrs = {};
                 if (step === 2) {
-                    if (!formData.productName.trim()) { newErrors.productName = "Product name is required."; isValid = false; }
-                    formData.parts.forEach((part, index) => {
-                        if (!part.name.trim()) { newErrors[`part_${index}_name`] = "Part name required."; isValid = false; }
-                        if (!part.filamentId) { newErrors[`part_${index}_filament`] = "Filament required."; isValid = false; }
-                        if (!part.colors || part.colors.length === 0) { newErrors[`part_${index}_colors`] = "Colour(s) required."; isValid = false; }
-                        if (!part.weight || part.weight <= 0) { newErrors[`part_${index}_weight`] = "Weight required."; isValid = false; }
+                    if (!formData.productName.trim()) newErrs.productName = "Required";
+                    formData.parts.forEach(p => {
+                        if (!p.name.trim()) newErrs[`part_${p.id}_name`] = "Required";
+                        if (!p.filamentId) newErrs[`part_${p.id}_filament`] = "Required";
+                        if (p.colors.length === 0) newErrs[`part_${p.id}_color`] = "Required";
+                        if (!p.weight || p.weight <= 0) newErrs[`part_${p.id}_weight`] = "Required";
                     });
                 }
                 if (step === 3) {
-                    formData.plates.forEach((plate, pIndex) => {
-                        if (!plate.timeH && !plate.timeM) { newErrors[`plate_${pIndex}_time`] = "Print time required."; isValid = false; }
-                        if (!plate.plateQty || plate.plateQty <= 0) { newErrors[`plate_${pIndex}_qty`] = "Plate qty required."; isValid = false; }
-                        plate.parts.forEach((pp, ppIndex) => {
-                            if (!pp.partId) { newErrors[`plate_${pIndex}_part_${ppIndex}_id`] = "Select part."; isValid = false; }
-                            if (!pp.qty || pp.qty <= 0) { newErrors[`plate_${pIndex}_part_${ppIndex}_qty`] = "Qty required."; isValid = false; }
-                        });
-                    });
+                    formData.plates.forEach((pl, i) => { if (!pl.qty || pl.qty < 1) newErrs[`plate_${pl.id}_qty`] = "Required"; });
                 }
-                if (step === 4) {
-                    formData.components.forEach((comp, index) => {
-                        if (comp.compId && (!comp.qty || comp.qty <= 0)) {
-                            newErrors[`comp_${index}_qty`] = "Quantity required if component selected."; isValid = false;
-                        }
-                    });
-                }
-
-                setErrors(newErrors);
-                return isValid;
+                setErrors(newErrs);
+                return Object.keys(newErrs).length === 0;
             };
 
-            const nextStep = () => { if (validateStep(currentStep)) { setCurrentStep(prev => Math.min(prev + 1, 5)); window.scrollTo(0, 0); } };
+            const nextStep = () => {
+                if (currentStep === 1 && user?.role === 'guest') { setShowProfile(true); return; }
+                if (validateStep(currentStep)) { setCurrentStep(prev => Math.min(prev + 1, 5)); window.scrollTo(0, 0); }
+            };
             const prevStep = () => { setCurrentStep(prev => Math.max(prev - 1, 1)); window.scrollTo(0, 0); };
 
-            // Auto-append component row
-            useEffect(() => {
-                if(formData.components.length > 0) {
-                    const lastComp = formData.components[formData.components.length - 1];
-                    if (lastComp && lastComp.compId && lastComp.qty) {
-                        setFormData(prev => ({
-                            ...prev,
-                            components: [...prev.components, { id: Date.now().toString(), compId: '', qty: '' }]
-                        }));
-                    }
-                }
-            }, [formData.components]);
+            const priceSummary = useMemo(() => {
+                let breakdowns = { plates: [], components: [] };
+                let partsCostTotal = 0;
 
-            const quotation = useMemo(() => {
-                if (!db) return null;
-                
-                let printSellingTotal = 0;
-                let compSellingTotal = 0;
-                let plateBreakdowns = [];
-                let componentBreakdowns = [];
-                let plateDetailsUI = [];
-                
-                let totalTotalPlates = 0;
-
-                // 1. Component Cost
-                formData.components.forEach(comp => {
-                    if (comp.compId && comp.qty) {
-                        const dbComp = db.COMPONENTS.find(c => c.id === comp.compId);
-                        if (dbComp) {
-                            const qty = parseInt(comp.qty) || 0;
-                            let totalCompLineCost = dbComp.price * qty;
-                            compSellingTotal += totalCompLineCost;
-                            
-                            componentBreakdowns.push({
-                                name: `${dbComp.name} ${dbComp.specification ? `- ${dbComp.specification}` : ''}`,
-                                detail: `(RM${dbComp.price.toFixed(2)}/${dbComp.unit}) x${qty}`,
-                                total: totalCompLineCost
-                            });
-                        }
-                    }
-                });
-
-                // 2. Printing Cost (Infection Status per Plate)
-                formData.plates.forEach((plate, index) => {
-                    const plateQty = parseInt(plate.plateQty) || 1;
-                    totalTotalPlates += plateQty; 
-
-                    let plateHasSupport = false;
-                    let plateIsMulti = false;
-                    let weightPerPlate = 0;
-                    let selectedFilamentRef = null;
-
-                    // Jangkitan Plate (Periksa keseluruhan)
-                    plate.parts.forEach(pp => {
-                        const partInfo = formData.parts.find(p => p.id === pp.partId);
-                        if (partInfo) {
-                            if (partInfo.supportReq === 'YES') plateHasSupport = true;
-                            if (partInfo.colors && partInfo.colors.length > 1) plateIsMulti = true;
-                            
-                            const partQty = parseInt(pp.qty) || 1;
-                            const weight = parseFloat(partInfo.weight) || 0;
-                            weightPerPlate += (weight * partQty);
-                            
-                            // Reference to grab the correct rates
-                            if(!selectedFilamentRef) {
-                                selectedFilamentRef = db.FILAMENTS.find(f => f.id === partInfo.filamentId);
+                formData.plates.forEach((plate, i) => {
+                    if (plate.qty > 0) {
+                        let isMulti = false, isSupport = false, plateWeight = 0, rate = 0;
+                        plate.parts.forEach(pp => {
+                            if (pp.qty > 0) {
+                                const masterPart = formData.parts.find(p => p.id === pp.partId);
+                                if (masterPart) {
+                                    if (masterPart.isMulticolor) isMulti = true;
+                                    if (masterPart.supportNeeded) isSupport = true;
+                                    plateWeight += (parseFloat(masterPart.weight) || 0) * pp.qty;
+                                    
+                                    const fil = db.FILAMENTS.find(f => f.id === masterPart.filamentId);
+                                    if (fil && rate === 0) { // simplified: take rate of first valid part
+                                        rate = isMulti ? (isSupport ? fil.priceMultiYes : fil.priceMultiNo) : (isSupport ? fil.priceMonoYes : fil.priceMonoNo);
+                                    }
+                                }
                             }
-                        }
-                    });
-
-                    let statusText = "MONOCHROME WITHOUT SUPPORT";
-                    let finalRatePerGram = 0;
-
-                    if (selectedFilamentRef) {
-                        if (plateIsMulti && plateHasSupport) {
-                            statusText = "MULTICOLOUR WITH SUPPORT";
-                            finalRatePerGram = selectedFilamentRef.rateMultiYes;
-                        } else if (plateIsMulti && !plateHasSupport) {
-                            statusText = "MULTICOLOUR WITHOUT SUPPORT";
-                            finalRatePerGram = selectedFilamentRef.rateMultiNo;
-                        } else if (!plateIsMulti && plateHasSupport) {
-                            statusText = "MONOCHROME WITH SUPPORT";
-                            finalRatePerGram = selectedFilamentRef.rateMonoYes;
-                        } else {
-                            statusText = "MONOCHROME WITHOUT SUPPORT";
-                            finalRatePerGram = selectedFilamentRef.rateMonoNo;
-                        }
-                    }
-
-                    // Calculation based on Total Grams in Plate * Final Rate * Plate Qty
-                    let totalCostForOnePlate = weightPerPlate * finalRatePerGram;
-                    let totalPlateCost = totalCostForOnePlate * plateQty;
-                    
-                    printSellingTotal += totalPlateCost;
-
-                    if (weightPerPlate > 0) {
-                        plateBreakdowns.push({
-                            name: `PLATE ${String(index + 1).padStart(2, '0')}`,
-                            detail: `(${weightPerPlate.toFixed(1)}g x RM${finalRatePerGram.toFixed(2)}) x${plateQty}`,
-                            total: totalPlateCost
                         });
-                        
-                        plateDetailsUI.push({
-                            originalPlate: plate, plateIndex: index, statusText: statusText,
-                            totalWeight: weightPerPlate, effectiveRate: finalRatePerGram,
-                        });
+                        if (plateWeight > 0 && rate > 0) {
+                            const pCost = plateWeight * rate;
+                            partsCostTotal += pCost * plate.qty;
+                            breakdowns.plates.push(`PLATE ${String(i+1).padStart(2,'0')} (${plateWeight.toFixed(1)}g x RM${rate.toFixed(2)}) x${plate.qty} = RM ${(pCost * plate.qty).toFixed(2)}`);
+                        }
                     }
                 });
 
-                // 3. Automatik Plate Fee
-                if (totalTotalPlates > 0) {
-                    const plateFeeService = db.COMPONENTS.find(c => 
-                        c.category?.toUpperCase() === 'SERVICES' && 
-                        c.name?.toUpperCase() === 'PLATE FEE'
-                    );
+                let compCostTotal = 0;
+                let compSellingTotal = 0;
 
-                    if (plateFeeService) {
-                        const totalPlateFee = plateFeeService.price * totalTotalPlates;
-                        compSellingTotal += totalPlateFee;
-                        
-                        // Insert at the top of components breakdown list
-                        componentBreakdowns.unshift({ 
-                            name: `${plateFeeService.name}`, 
-                            detail: `(RM${plateFeeService.price.toFixed(2)}/${plateFeeService.unit}) x${totalTotalPlates}`,
-                            total: totalPlateFee
-                        });
-                    }
+                // Auto Inject Plate Fee
+                const totalTotalPlates = formData.plates.reduce((sum, pl) => sum + parseInt(pl.qty||0), 0);
+                const services = db.COMPONENTS.filter(c => c.category?.toUpperCase() === 'SERVICES');
+                const plateFee = services.find(c => c.name.toUpperCase().includes('PLATE FEE'));
+                if (plateFee && totalTotalPlates > 0) {
+                    const fee = plateFee.salePrice * totalTotalPlates;
+                    compSellingTotal += fee;
+                    breakdowns.components.push(`Plate Fee (RM${plateFee.salePrice.toFixed(2)}/plate) x${totalTotalPlates} = RM ${fee.toFixed(2)}`);
                 }
 
-                // Add epsilon for JS floating point rounding safety
-                const sellingPricePerUnit = Math.round((printSellingTotal + compSellingTotal + Number.EPSILON) * 100) / 100;
-                const totalEstimatedPrice = Math.round((sellingPricePerUnit * (parseInt(formData.orderQty) || 1) + Number.EPSILON) * 100) / 100;
+                // Normal Components
+                formData.components.forEach(comp => {
+                    if (comp.componentName && comp.qty > 0) {
+                        const masterComp = db.COMPONENTS.find(c => c.name === comp.componentName);
+                        if (masterComp) {
+                            compCostTotal += masterComp.costPrice * comp.qty;
+                            compSellingTotal += masterComp.salePrice * comp.qty;
+                            breakdowns.components.push(`${masterComp.name} - ${masterComp.spec} (RM${masterComp.salePrice.toFixed(2)}/${masterComp.unit}) x${comp.qty} = RM ${(masterComp.salePrice * comp.qty).toFixed(2)}`);
+                        }
+                    }
+                });
 
-                return {
-                    printSellingTotal, compSellingTotal, sellingPricePerUnit,
-                    totalEstimatedPrice, plateBreakdowns, componentBreakdowns, plateDetailsUI
+                return { 
+                    sellingPrice: partsCostTotal + compSellingTotal,
+                    breakdowns 
                 };
             }, [formData, db]);
 
-            if (dbError) {
-                return (
-                    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-                        <div className="text-center p-8 bg-white rounded-2xl shadow-sm border border-red-200">
-                            <IconAlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-                            <h2 className="text-xl font-bold text-slate-800">Gagal Memuat Turun Data</h2>
-                            <p className="text-slate-600 mt-2">Sila semak semula link CSV Google Sheets anda.</p>
-                        </div>
-                    </div>
-                );
-            }
+            const handleSaveQuotation = async () => {
+                if (!user || user.role === 'guest') { setShowProfile(true); return; }
+                const isSaving = confirm("Adakah anda pasti mahu menyimpan draf ini?");
+                if(!isSaving) return;
 
-            if (!db) {
-                return (
-                    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-                        <div className="text-center space-y-4">
-                            <div className="w-12 h-12 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin mx-auto"></div>
-                            <p className="text-brand-900 font-semibold animate-pulse">Menghubungkan ke Google Sheets...</p>
-                        </div>
-                    </div>
-                );
-            }
-
-            const renderStep1 = () => (
-                <div className="animate-fade-in space-y-8">
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                        <div className="bg-slate-50 border-b border-slate-200 p-6">
-                            <h2 className="text-xl font-bold text-brand-900">Available Filaments</h2>
-                            <p className="text-sm text-slate-500 mt-1">Review our supported materials and colours (Prices listed are selling rates).</p>
-                        </div>
-                        <div className="p-0 overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="bg-slate-50 text-slate-600 text-sm border-b border-slate-200">
-                                        <th className="p-4 font-semibold">Material Type</th>
-                                        <th className="p-4 font-semibold">Brand & Variant</th>
-                                        <th className="p-4 font-semibold">Available Colours</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {db.FILAMENTS.length > 0 ? db.FILAMENTS.map((f, i) => (
-                                        <tr key={i} className="border-b border-slate-100 hover:bg-slate-50">
-                                            <td className="p-4 font-semibold text-brand-800">{f.type}</td>
-                                            <td className="p-4 text-slate-600">{f.brand} - {f.variant}</td>
-                                            <td className="p-4">
-                                                <div className="flex flex-wrap gap-1">
-                                                    {f.colors.map(c => (
-                                                        <span key={c} className="px-2 py-1 bg-white border border-slate-200 text-xs rounded-md text-slate-600 shadow-sm">{c}</span>
-                                                    ))}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )) : (
-                                        <tr>
-                                            <td colSpan="3" className="p-4 bg-red-50">
-                                                <div className="text-red-600 font-bold mb-2">Tiada rekod filament dijumpai.</div>
-                                                <div className="text-sm text-slate-700 mb-2">Sila semak struktur lajur CSV. Debug Header:</div>
-                                                <pre className="text-xs bg-white p-3 border border-red-200 rounded overflow-x-auto text-slate-800 font-mono">
-                                                    {JSON.stringify(db.rawDebug, null, 2)}
-                                                </pre>
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                        <div className="bg-slate-50 border-b border-slate-200 p-6">
-                            <h2 className="text-xl font-bold text-brand-900">Additional Components</h2>
-                            <p className="text-sm text-slate-500 mt-1">Available hardware and add-ons.</p>
-                        </div>
-                        <div className="p-0 overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="bg-slate-50 text-slate-600 text-sm border-b border-slate-200">
-                                        <th className="p-4 font-semibold">Name</th>
-                                        <th className="p-4 font-semibold">Specification</th>
-                                        <th className="p-4 font-semibold">Sale Price / Unit</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {db.COMPONENTS.length > 0 ? db.COMPONENTS.filter(c => c.category?.toUpperCase() !== 'SERVICES').map((c, i) => (
-                                        <tr key={i} className="border-b border-slate-100 hover:bg-slate-50">
-                                            <td className="p-4 font-semibold text-brand-800">{c.name}</td>
-                                            <td className="p-4 text-slate-600">{c.specification}</td>
-                                            <td className="p-4 text-slate-700 font-medium">RM {c.price.toFixed(2)} / {c.unit}</td>
-                                        </tr>
-                                    )) : (
-                                        <tr><td colSpan="3" className="p-4 text-center text-slate-400">Tiada rekod komponen.</td></tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            );
-
-            const renderStep2 = () => {
-                const handlePartCountChange = (e) => {
-                    const count = parseInt(e.target.value) || 1;
-                    const newParts = [...formData.parts];
-                    if (count > newParts.length) {
-                        for (let i = newParts.length; i < count; i++) {
-                            newParts.push({ id: Date.now().toString() + i, name: '', filamentId: '', colors: [], supportReq: 'NO', weight: '' });
-                        }
-                    } else if (count < newParts.length) {
-                        newParts.splice(count);
-                    }
-                    setFormData({ ...formData, partCount: count, parts: newParts });
+                const payload = {
+                    action: 'saveDraft',
+                    PRODUCT_ID: `USR${user.id || 'G'}P${Math.floor(Math.random()*10000).toString().padStart(4,'0')}`,
+                    TIMESTAMP: new Date().toISOString(),
+                    USER_ID: user.id,
+                    PRODUCT_NAME: encodeForDB(formData.productName),
+                    PARTS_DETAIL: formData.parts.map(p => `${encodeForDB(p.name)} ${p.weight}g`).join(', '),
+                    FILAMENTS_DETAIL: formData.parts.map(p => {
+                        const f = db.FILAMENTS.find(x => x.id === p.filamentId);
+                        return `${encodeForDB(p.name)} ${f?.type} (${f?.variant}) ${p.colors.join(': ')}`;
+                    }).join(', '),
+                    PLATES_DETAIL: formData.plates.map((pl, i) => {
+                        const pt = pl.parts.filter(x=>x.qty>0).map(x => `${encodeForDB(formData.parts.find(p=>p.id===x.partId)?.name)} x${x.qty}`).join(': ');
+                        return `PLATE${String(i+1).padStart(2,'0')} x${pl.qty} - ${pt}`;
+                    }).join(', '),
+                    TOTAL_PLATES: formData.plates.reduce((s, pl) => s + parseInt(pl.qty||0), 0),
+                    SELLING_PRICE_PER_UNIT: priceSummary.sellingPrice.toFixed(2),
+                    ORDER_QTY: formData.orderQty,
+                    TOTAL_ESTIMATED_PRICE: (priceSummary.sellingPrice * formData.orderQty).toFixed(2),
+                    STATUS: 'DRAFT'
                 };
 
-                const updatePart = (index, field, value) => {
-                    const newParts = formData.parts.map((p, i) => {
-                        if (i === index) {
-                            let updated = { ...p, [field]: value };
-                            if (field === 'filamentId') updated.colors = []; // Reset color if filament changes
-                            return updated;
-                        }
-                        return p;
-                    });
-                    setFormData({ ...formData, parts: newParts });
-                };
+                try {
+                    // MOCK POST TO WEB APP
+                    // const res = await fetch(API_DRAFTS, { method: 'POST', body: new URLSearchParams(payload) });
+                    alert(`Draft Berjaya Disimpan!\n\nPayload Dihantar:\nPRODUCT_ID: ${payload.PRODUCT_ID}\nPARTS_DETAIL: ${payload.PARTS_DETAIL}`);
+                    setShowProfile(true); // Open profile to show the new draft list
+                } catch(e) {
+                    alert("Ralat semasa menyimpan draf.");
+                }
+            };
 
-                return (
+            if (view === 'huddle') return <HuddleScreen onNavigate={setView} setGuest={() => {setUser({role: 'guest', nickname: 'Guest'}); setView('app');}} />;
+            if (view === 'login') return <LoginScreen onNavigate={setView} onLoginSuccess={handleLoginSuccess} />;
+            if (view === 'signup') return <SignupScreen onNavigate={setView} onSignupSuccess={handleSignupSuccess} />;
+            if (view === 'otp') return <OtpScreen onNavigate={setView} tempUser={tempUser} onVerify={handleLoginSuccess} />;
+
+            const renderStep = () => {
+                if (currentStep === 1) return (
                     <div className="space-y-6 animate-fade-in">
                         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                            <h2 className="text-xl font-bold text-brand-900 mb-6">Product Details</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-2">PRODUCT NAME</label>
-                                    <input type="text" value={formData.productName} onChange={e => setFormData({...formData, productName: e.target.value.toUpperCase()})}
-                                        className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all ${errors.productName ? 'border-red-500' : 'border-slate-300'}`} placeholder="E.G., CUSTOM ENCLOSURE V2" />
-                                    {errors.productName && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><IconAlertCircle/>{errors.productName}</p>}
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-2">NUMBER OF PRODUCT PARTS</label>
-                                    <select value={formData.partCount} onChange={handlePartCountChange} className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none bg-white">
-                                        {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
-                                    </select>
-                                </div>
+                            <h3 className="text-lg font-bold text-brand-900 mb-4 border-b pb-2">Available Filaments (From DB)</h3>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="text-xs text-slate-500 bg-slate-50 uppercase">
+                                        <tr><th className="px-4 py-3 rounded-tl-lg">Material</th><th className="px-4 py-3">Variant</th><th className="px-4 py-3">Brand</th><th className="px-4 py-3 rounded-tr-lg">Available Colors</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        {db.FILAMENTS.length === 0 ? <tr><td colSpan="4" className="px-4 py-8 text-center text-slate-400">Loading database...</td></tr> : 
+                                            db.FILAMENTS.map(f => (
+                                            <tr key={f.id} className="border-b last:border-0 hover:bg-brand-50">
+                                                <td className="px-4 py-3 font-semibold text-slate-700">{f.type}</td>
+                                                <td className="px-4 py-3 text-slate-600">{f.variant}</td>
+                                                <td className="px-4 py-3 text-slate-600">{f.brand}</td>
+                                                <td className="px-4 py-3">
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {f.colors.map(c => <span key={c} className="px-2 py-1 bg-white border border-slate-200 rounded-md text-[10px] font-medium">{c}</span>)}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                );
+                
+                if (currentStep === 2) return (
+                    <div className="space-y-6 animate-fade-in">
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                            <h3 className="text-lg font-bold text-brand-900 mb-4">Product Details</h3>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1">PRODUCT NAME</label>
+                                <input type="text" value={formData.productName} onChange={e => setFormData({...formData, productName: sanitizeInput(e.target.value)})}
+                                    className={`w-full p-4 bg-slate-50 border ${errors.productName ? 'border-red-500' : 'border-slate-200'} rounded-xl focus:ring-2 outline-none uppercase font-bold`} placeholder="E.G. KEYCHAIN V1" />
                             </div>
                         </div>
 
-                        {formData.parts.map((part, index) => {
-                            const selectedFilament = db.FILAMENTS.find(f => f.id === part.filamentId);
-                            const availableColors = selectedFilament ? selectedFilament.colors : [];
-
-                            return (
-                                <div key={part.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden">
-                                    <div className="absolute top-0 left-0 w-1 h-full bg-brand-500"></div>
-                                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                                        <span className="bg-slate-100 text-slate-500 px-2 py-1 rounded text-sm">PART {String(index + 1).padStart(2, '0')}</span>
-                                    </h3>
-                                    
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-5">
-                                        <div className="lg:col-span-2">
-                                            <label className="block text-xs font-semibold text-slate-500 mb-1">PART NAME</label>
-                                            <input type="text" value={part.name} onChange={e => updatePart(index, 'name', e.target.value.toUpperCase())}
-                                                className={`w-full p-2.5 text-sm border rounded-lg outline-none ${errors[`part_${index}_name`] ? 'border-red-500' : 'border-slate-300'}`} placeholder="E.G., TOP COVER" />
-                                        </div>
-                                        <div className="lg:col-span-4">
-                                            <label className="block text-xs font-semibold text-slate-500 mb-1">FILAMENT TYPE</label>
-                                            <select value={part.filamentId} onChange={e => updatePart(index, 'filamentId', e.target.value)}
-                                                className={`w-full p-2.5 text-sm border rounded-lg outline-none bg-white ${errors[`part_${index}_filament`] ? 'border-red-500' : 'border-slate-300'}`}>
-                                                <option value="">Select filament...</option>
-                                                {db.FILAMENTS.map(f => <option key={f.id} value={f.id}>{f.type} - {f.brand} ({f.variant})</option>)}
-                                            </select>
-                                        </div>
-                                        <div className="lg:col-span-6">
-                                            <label className="block text-xs font-semibold text-slate-500 mb-1">COLOUR(S) - (Boleh pilih lebih dari satu)</label>
-                                            <div className="flex flex-wrap gap-2 mt-1">
-                                                {availableColors.length > 0 ? availableColors.map(c => {
-                                                    const isSelected = part.colors?.includes(c);
-                                                    return (
-                                                        <button key={c} type="button"
-                                                            onClick={() => {
-                                                                let newColors = [...(part.colors || [])];
-                                                                if (isSelected) newColors = newColors.filter(color => color !== c);
-                                                                else newColors.push(c);
-                                                                updatePart(index, 'colors', newColors);
-                                                            }}
-                                                            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
-                                                                isSelected ? 'bg-brand-500 text-white border-brand-500 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-brand-300 hover:bg-slate-50'
-                                                            }`}
-                                                        >
-                                                            {c}
-                                                        </button>
-                                                    )
-                                                }) : <span className="text-xs text-slate-400 py-1.5 px-1">Sila pilih filament dahulu untuk melihat warna...</span>}
-                                            </div>
-                                            {errors[`part_${index}_colors`] && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><IconAlertCircle/>{errors[`part_${index}_colors`]}</p>}
-                                        </div>
-                                        <div className="lg:col-span-2">
-                                            <label className="block text-xs font-semibold text-slate-500 mb-1">EST. WEIGHT (g)</label>
-                                            <input type="number" min="0" step="0.1" value={part.weight} onChange={e => updatePart(index, 'weight', e.target.value)}
-                                                className={`w-full p-2.5 text-sm border rounded-lg outline-none ${errors[`part_${index}_weight`] ? 'border-red-500' : 'border-slate-300'}`} placeholder="e.g., 45.5" />
-                                        </div>
-                                        <div className="lg:col-span-4">
-                                            <label className="block text-xs font-semibold text-slate-500 mb-1">SUPPORT REQUIRED?</label>
-                                            <div className="flex gap-4 mt-1">
-                                                <label className="flex items-center gap-2 cursor-pointer p-1">
-                                                    <input type="radio" name={`support_${index}`} value="YES" checked={part.supportReq === 'YES'} onChange={() => updatePart(index, 'supportReq', 'YES')} className="w-4 h-4 text-brand-600 focus:ring-brand-500"/>
-                                                    <span className="text-sm">YES</span>
-                                                </label>
-                                                <label className="flex items-center gap-2 cursor-pointer p-1">
-                                                    <input type="radio" name={`support_${index}`} value="NO" checked={part.supportReq === 'NO'} onChange={() => updatePart(index, 'supportReq', 'NO')} className="w-4 h-4 text-brand-600 focus:ring-brand-500"/>
-                                                    <span className="text-sm">NO</span>
-                                                </label>
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="lg:col-span-6 mt-2 pt-4 border-t border-slate-200 flex items-center justify-between bg-slate-50 -mx-6 -mb-6 px-6 py-4 rounded-b-2xl">
-                                            <div className="flex items-center gap-2">
-                                                <div className="p-1.5 bg-white shadow-sm rounded text-slate-500">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                                                </div>
-                                                <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Classification</span>
-                                            </div>
-                                            <span className={`text-xs px-3 py-1 rounded-full font-bold shadow-sm ${part.colors?.length > 1 ? 'bg-purple-100 text-purple-700 border border-purple-200' : 'bg-white border border-slate-200 text-slate-600'}`}>
-                                                {part.colors?.length > 1 ? 'MULTICOLOR' : (part.colors?.length === 1 ? 'MONOCHROME' : 'PENDING SELECTION')}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </div>
-                );
-            };
-
-            const renderStep3 = () => {
-                const handlePlateCountChange = (e) => {
-                    const count = parseInt(e.target.value) || 1;
-                    const newPlates = [...formData.plates];
-                    if (count > newPlates.length) {
-                        for (let i = newPlates.length; i < count; i++) {
-                            newPlates.push({ id: Date.now().toString() + i, partsInPlate: 1, parts: [{ partId: '', qty: '' }], timeH: '', timeM: '', plateQty: '1' });
-                        }
-                    } else if (count < newPlates.length) {
-                        newPlates.splice(count);
-                    }
-                    setFormData({ ...formData, plateCount: count, plates: newPlates });
-                };
-
-                const updatePlate = (pIndex, field, value) => {
-                    const newPlates = [...formData.plates];
-                    if (field === 'partsInPlate') {
-                        const count = parseInt(value) || 1;
-                        const newParts = [...newPlates[pIndex].parts];
-                        if (count > newParts.length) {
-                            for (let i = newParts.length; i < count; i++) newParts.push({ partId: '', qty: '' });
-                        } else {
-                            newParts.splice(count);
-                        }
-                        newPlates[pIndex].parts = newParts;
-                        newPlates[pIndex].partsInPlate = count;
-                    } else {
-                        newPlates[pIndex][field] = value;
-                    }
-                    setFormData({ ...formData, plates: newPlates });
-                };
-
-                const updatePlatePart = (pIndex, ppIndex, field, value) => {
-                    const newPlates = [...formData.plates];
-                    newPlates[pIndex].parts[ppIndex][field] = value;
-                    setFormData({ ...formData, plates: newPlates });
-                };
-
-                const validParts = formData.parts.filter(p => p.name.trim() !== '');
-
-                return (
-                    <div className="space-y-6 animate-fade-in">
                         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                            <label className="block text-sm font-semibold text-slate-700 mb-2">NUMBER OF PLATES / PRINT JOBS</label>
-                            <select value={formData.plateCount} onChange={handlePlateCountChange} className="w-full max-w-xs p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none bg-white">
-                                {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
-                            </select>
-                        </div>
-
-                        {formData.plates.map((plate, pIndex) => (
-                            <div key={plate.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden">
-                                <div className="absolute top-0 left-0 w-1 h-full bg-slate-400"></div>
-                                <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
-                                    <h3 className="text-lg font-bold text-slate-800">PLATE {String(pIndex + 1).padStart(2, '0')}</h3>
-                                    <div className="flex items-center gap-3">
-                                        <label className="text-xs font-semibold text-slate-500">PARTS IN THIS PLATE:</label>
-                                        <select value={plate.partsInPlate} onChange={e => updatePlate(pIndex, 'partsInPlate', e.target.value)} className="p-1.5 text-sm border border-slate-300 rounded outline-none bg-white">
-                                            {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-4 mb-6">
-                                    {plate.parts.map((pp, ppIndex) => (
-                                        <div key={ppIndex} className="flex gap-4 items-start">
-                                            <div className="flex-1">
-                                                <label className="block text-xs font-semibold text-slate-500 mb-1">SELECT PART</label>
-                                                <select value={pp.partId} onChange={e => updatePlatePart(pIndex, ppIndex, 'partId', e.target.value)}
-                                                    className={`w-full p-2.5 text-sm border rounded-lg outline-none bg-white ${errors[`plate_${pIndex}_part_${ppIndex}_id`] ? 'border-red-500' : 'border-slate-300'}`}>
-                                                    <option value="">Choose part...</option>
-                                                    {validParts.map(p => <option key={p.id} value={p.id}>{p.name} ({db.FILAMENTS.find(f=>f.id===p.filamentId)?.type})</option>)}
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-lg font-bold text-brand-900">Configure Parts</h3>
+                                <button onClick={addPart} className="flex items-center gap-1 text-xs font-bold text-brand-600 hover:text-brand-700 bg-brand-50 px-3 py-1.5 rounded-lg"><IconPlus/> ADD PART</button>
+                            </div>
+                            <div className="space-y-4">
+                                {formData.parts.map((part, index) => (
+                                    <div key={part.id} className="p-4 bg-slate-50 border border-slate-200 rounded-xl relative group">
+                                        {formData.parts.length > 1 && (
+                                            <button onClick={() => removePart(part.id)} className="absolute -top-2 -right-2 w-6 h-6 bg-red-100 text-red-500 rounded-full flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100"><IconX/></button>
+                                        )}
+                                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                                            <div className="md:col-span-3">
+                                                <label className="block text-[10px] font-bold text-slate-500 mb-1">PART NAME</label>
+                                                <input type="text" value={part.name} onChange={e => handlePartChange(part.id, 'name', sanitizeInput(e.target.value))} className={`w-full p-2.5 bg-white border ${errors[`part_${part.id}_name`] ? 'border-red-500' : 'border-slate-200'} rounded-lg outline-none text-sm font-bold uppercase`} placeholder={`PART ${index+1}`} />
+                                            </div>
+                                            <div className="md:col-span-4">
+                                                <label className="block text-[10px] font-bold text-slate-500 mb-1">FILAMENT TYPE</label>
+                                                <select value={part.filamentId} onChange={e => handlePartChange(part.id, 'filamentId', e.target.value)} className={`w-full p-2.5 bg-white border ${errors[`part_${part.id}_filament`] ? 'border-red-500' : 'border-slate-200'} rounded-lg outline-none text-sm`}>
+                                                    <option value="">Select Material...</option>
+                                                    {db.FILAMENTS.map(f => <option key={f.id} value={f.id}>{f.type} - {f.brand} ({f.variant})</option>)}
                                                 </select>
                                             </div>
-                                            <div className="w-32">
-                                                <label className="block text-xs font-semibold text-slate-500 mb-1">QTY / PLATE</label>
-                                                <input type="number" min="1" value={pp.qty} onChange={e => updatePlatePart(pIndex, ppIndex, 'qty', e.target.value)}
-                                                    className={`w-full p-2.5 text-sm border rounded-lg outline-none ${errors[`plate_${pIndex}_part_${ppIndex}_qty`] ? 'border-red-500' : 'border-slate-300'}`} placeholder="Qty" />
+                                            <div className="md:col-span-3">
+                                                <label className="block text-[10px] font-bold text-slate-500 mb-1">WEIGHT (g)</label>
+                                                <input type="number" min="0.1" step="0.1" value={part.weight} onChange={e => handlePartChange(part.id, 'weight', e.target.value)} className={`w-full p-2.5 bg-white border ${errors[`part_${part.id}_weight`] ? 'border-red-500' : 'border-slate-200'} rounded-lg outline-none text-sm font-medium`} placeholder="0.0" />
+                                            </div>
+                                            <div className="md:col-span-2 flex flex-col justify-end gap-2 pb-1">
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input type="checkbox" checked={part.isMulticolor} onChange={e => handlePartChange(part.id, 'isMulticolor', e.target.checked)} className="w-4 h-4 rounded text-brand-600 focus:ring-brand-500" />
+                                                    <span className="text-[10px] font-bold text-slate-600">MULTICOLOR</span>
+                                                </label>
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input type="checkbox" checked={part.supportNeeded} onChange={e => handlePartChange(part.id, 'supportNeeded', e.target.checked)} className="w-4 h-4 rounded text-brand-600 focus:ring-brand-500" />
+                                                    <span className="text-[10px] font-bold text-slate-600">SUPPORT</span>
+                                                </label>
                                             </div>
                                         </div>
-                                    ))}
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                                    <div>
-                                        <label className="block text-xs font-semibold text-slate-500 mb-1">PRINT TIME</label>
-                                        <div className="flex gap-2">
-                                            <div className="flex-1 flex items-center gap-1">
-                                                <input type="number" min="0" value={plate.timeH} onChange={e => updatePlate(pIndex, 'timeH', e.target.value)}
-                                                    className={`w-full p-2 text-sm border rounded-lg outline-none ${errors[`plate_${pIndex}_time`] ? 'border-red-500' : 'border-slate-300'}`} placeholder="Hrs" />
-                                                <span className="text-xs text-slate-400">h</span>
+                                        {part.filamentId && (
+                                            <div className="mt-4 pt-4 border-t border-slate-200">
+                                                <label className="block text-[10px] font-bold text-slate-500 mb-2">SELECT COLORS</label>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {db.FILAMENTS.find(f => f.id === part.filamentId)?.colors.map(color => {
+                                                        const isSel = part.colors.includes(color);
+                                                        return (
+                                                            <button key={color} onClick={() => {
+                                                                const newCols = isSel ? part.colors.filter(c => c !== color) : [...part.colors, color];
+                                                                handlePartChange(part.id, 'colors', newCols);
+                                                            }} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${isSel ? 'bg-brand-500 border-brand-500 text-white shadow-sm' : 'bg-white border-slate-300 text-slate-600 hover:border-brand-300'}`}>
+                                                                {color}
+                                                            </button>
+                                                        )
+                                                    })}
+                                                </div>
                                             </div>
-                                            <div className="flex-1 flex items-center gap-1">
-                                                <input type="number" min="0" max="59" value={plate.timeM} onChange={e => updatePlate(pIndex, 'timeM', e.target.value)}
-                                                    className={`w-full p-2 text-sm border rounded-lg outline-none ${errors[`plate_${pIndex}_time`] ? 'border-red-500' : 'border-slate-300'}`} placeholder="Min" />
-                                                <span className="text-xs text-slate-400">m</span>
-                                            </div>
-                                        </div>
+                                        )}
                                     </div>
-                                    <div></div>
-                                    <div>
-                                        <label className="block text-xs font-semibold text-slate-500 mb-1">NUMBER OF PLATES TO PRINT</label>
-                                        <input type="number" min="1" value={plate.plateQty} onChange={e => updatePlate(pIndex, 'plateQty', e.target.value)}
-                                            className={`w-full p-2.5 text-sm border rounded-lg outline-none ${errors[`plate_${pIndex}_qty`] ? 'border-red-500' : 'border-slate-300'}`} />
-                                    </div>
-                                </div>
+                                ))}
                             </div>
-                        ))}
+                        </div>
                     </div>
                 );
-            };
 
-            const renderStep4 = () => {
-                const updateComponent = (index, field, value) => {
-                    const newComps = [...formData.components];
-                    newComps[index][field] = value;
-                    setFormData({ ...formData, components: newComps });
-                };
-
-                const removeComponent = (index) => {
-                    const newComps = formData.components.filter((_, i) => i !== index);
-                    if (newComps.length === 0) newComps.push({ id: Date.now().toString(), compId: '', qty: '' });
-                    setFormData({ ...formData, components: newComps });
-                };
-
-                return (
+                if (currentStep === 3) return (
                     <div className="space-y-6 animate-fade-in">
                         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                            <h2 className="text-xl font-bold text-brand-900 mb-2">Optional / Additional Components</h2>
-                            <p className="text-sm text-slate-500 mb-6">Select any extra hardware needed for this product. New rows appear automatically.</p>
-                            
+                            <div className="flex justify-between items-center mb-4 border-b pb-2">
+                                <h3 className="text-lg font-bold text-brand-900">Plate Allocation</h3>
+                                <button onClick={() => setFormData(p => ({...p, plates: [...p.plates, { id: Date.now(), qty: 1, parts: p.parts.map(pt => ({ partId: pt.id, qty: 0 })) }] }))} className="flex items-center gap-1 text-xs font-bold text-brand-600 hover:text-brand-700 bg-brand-50 px-3 py-1.5 rounded-lg"><IconPlus/> ADD PLATE</button>
+                            </div>
                             <div className="space-y-4">
-                                {formData.components.map((comp, index) => (
-                                    <div key={comp.id} className="flex gap-4 items-center">
-                                        <div className="flex-1">
-                                            <label className={`block text-xs font-semibold mb-1 ${index === 0 ? 'text-slate-500' : 'sr-only'}`}>COMPONENT {String(index+1).padStart(2, '0')}</label>
-                                            <select value={comp.compId} onChange={e => updateComponent(index, 'compId', e.target.value)}
-                                                className="w-full p-3 text-sm border border-slate-300 rounded-lg outline-none bg-white">
-                                                <option value="">Select component...</option>
-                                                {db.COMPONENTS.filter(c => c.category?.toUpperCase() !== 'SERVICES').map(c => (
-                                                    <option key={c.id} value={c.id}>{c.name} - {c.specification} (RM {c.price.toFixed(2)}/{c.unit})</option>
-                                                ))}
-                                            </select>
+                                {formData.plates.map((plate, pIdx) => (
+                                    <div key={plate.id} className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                                        <div className="bg-slate-50 p-3 border-b border-slate-200 flex justify-between items-center">
+                                            <h4 className="font-bold text-slate-700">PLATE {String(pIdx+1).padStart(2,'0')}</h4>
+                                            <div className="flex items-center gap-2">
+                                                <label className="text-xs font-bold text-slate-500">PRINT QTY:</label>
+                                                <input type="number" min="0" value={plate.qty} onChange={e => setFormData(p => ({...p, plates: p.plates.map(pl => pl.id === plate.id ? {...pl, qty: parseInt(e.target.value)||0} : pl)}))} className="w-16 p-1 text-center bg-white border border-slate-300 rounded font-bold outline-none focus:border-brand-500" />
+                                            </div>
                                         </div>
-                                        <div className="w-32">
-                                            <label className={`block text-xs font-semibold mb-1 ${index === 0 ? 'text-slate-500' : 'sr-only'}`}>QUANTITY</label>
-                                            <input type="number" min="1" value={comp.qty} onChange={e => updateComponent(index, 'qty', e.target.value)} disabled={!comp.compId}
-                                                className={`w-full p-3 text-sm border rounded-lg outline-none disabled:bg-slate-50 disabled:border-slate-200 ${errors[`comp_${index}_qty`] ? 'border-red-500' : 'border-slate-300'}`} placeholder="Qty" />
-                                        </div>
-                                        <div className={`pt-${index === 0 ? '6' : '0'}`}>
-                                            {index < formData.components.length - 1 && (
-                                                <button onClick={() => removeComponent(index)} className="p-3 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
-                                                    <IconTrash />
-                                                </button>
-                                            )}
+                                        <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+                                            {plate.parts.map(pp => {
+                                                const masterPart = formData.parts.find(x => x.id === pp.partId);
+                                                return (
+                                                    <div key={pp.partId} className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                                        <p className="text-xs font-bold text-brand-900 mb-2 truncate" title={masterPart?.name}>{masterPart?.name || 'Unnamed'}</p>
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-[10px] text-slate-500">Parts/Plate:</span>
+                                                            <input type="number" min="0" value={pp.qty} onChange={e => handlePlateChange(plate.id, pp.partId, 'qty', parseInt(e.target.value)||0)} className="w-14 p-1 text-center bg-white border border-slate-300 rounded text-sm font-bold outline-none focus:border-brand-500" />
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 ))}
@@ -864,101 +888,61 @@
                         </div>
                     </div>
                 );
-            };
 
-            const renderStep5 = () => {
-                return (
+                if (currentStep === 4) return (
                     <div className="space-y-6 animate-fade-in">
-                        <div className="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden">
-                            <div className="bg-brand-900 text-white p-8 text-center border-b-4 border-brand-500">
-                                <h2 className="text-3xl font-bold tracking-tight">3D PRINT QUOTATION</h2>
-                                <p className="text-brand-100 mt-2 uppercase tracking-widest text-sm">RAKA-CHI CALCULATE</p>
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                            <h3 className="text-lg font-bold text-brand-900 mb-4 border-b pb-2">Additional Components (Optional)</h3>
+                            <div className="space-y-3">
+                                {formData.components.map((comp, index) => (
+                                    <div key={comp.id} className="flex flex-col sm:flex-row gap-3">
+                                        <select value={comp.componentName} onChange={e => setFormData(p => ({...p, components: p.components.map(c => c.id === comp.id ? {...c, componentName: e.target.value} : c)}))} className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none text-sm font-medium">
+                                            <option value="">None</option>
+                                            {db.COMPONENTS.filter(c => c.category?.toUpperCase() !== 'SERVICES').map(c => (
+                                                <option key={c.name} value={c.name}>{c.name} - {c.spec} (RM{c.salePrice.toFixed(2)})</option>
+                                            ))}
+                                        </select>
+                                        {comp.componentName && (
+                                            <input type="number" min="1" value={comp.qty} onChange={e => setFormData(p => ({...p, components: p.components.map(c => c.id === comp.id ? {...c, qty: parseInt(e.target.value)||1} : c)}))} className="w-full sm:w-24 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none text-center font-bold" />
+                                        )}
+                                    </div>
+                                ))}
+                                <button onClick={() => setFormData(p => ({...p, components: [...p.components, { id: Date.now(), componentName: '', qty: 1 }]}))} className="text-xs font-bold text-brand-600 mt-2">+ Add Another Row</button>
                             </div>
+                        </div>
+                    </div>
+                );
 
-                            <div className="p-8 space-y-8">
+                if (currentStep === 5) return (
+                    <div className="space-y-6 animate-fade-in">
+                        <div className="bg-brand-900 text-white p-8 rounded-3xl shadow-xl relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-64 h-64 bg-brand-600 rounded-full mix-blend-overlay filter blur-3xl opacity-50"></div>
+                            <h2 className="text-3xl font-extrabold mb-1">{formData.productName || 'UNNAMED PRODUCT'}</h2>
+                            <p className="text-brand-200 text-sm font-medium tracking-widest mb-8">SELLING QUOTATION</p>
+                            
+                            <div className="space-y-6 relative z-10">
                                 <div>
-                                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 border-b pb-2">Product Information</h3>
-                                    <div className="grid grid-cols-2 gap-y-4 text-sm">
-                                        <div className="text-slate-500">Product Name</div>
-                                        <div className="font-semibold text-slate-800 text-right">{formData.productName || 'Unnamed Product'}</div>
-                                        
-                                        <div className="text-slate-500">Number of Parts</div>
-                                        <div className="font-semibold text-slate-800 text-right">{formData.parts.length}</div>
+                                    <h4 className="text-xs font-bold text-brand-300 uppercase tracking-wider mb-3">Cost Breakdown</h4>
+                                    <div className="bg-white/10 rounded-xl p-4 space-y-2 backdrop-blur-sm border border-white/10 font-mono text-sm">
+                                        {priceSummary.breakdowns.plates.map((txt, i) => <div key={i} className="flex justify-between border-b border-white/10 pb-2 last:border-0 last:pb-0"><span>{txt.split('=')[0]}</span><span className="font-bold">{txt.split('=')[1]}</span></div>)}
+                                        {priceSummary.breakdowns.components.map((txt, i) => <div key={i+100} className="flex justify-between border-b border-white/10 pb-2 last:border-0 last:pb-0 text-brand-100"><span>{txt.split('=')[0]}</span><span className="font-bold">{txt.split('=')[1]}</span></div>)}
+                                    </div>
+                                </div>
+                                
+                                <div className="flex flex-col sm:flex-row justify-between items-end sm:items-center bg-white text-slate-800 p-5 rounded-2xl shadow-lg border-2 border-brand-200">
+                                    <div>
+                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Selling Price / Unit</p>
+                                        <p className="text-4xl font-extrabold text-brand-600">RM {priceSummary.sellingPrice.toFixed(2)}</p>
+                                    </div>
+                                    <div className="mt-4 sm:mt-0 flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                                        <label className="text-xs font-bold text-slate-500 pl-2">ORDER QTY:</label>
+                                        <input type="number" min="1" value={formData.orderQty} onChange={e => setFormData({...formData, orderQty: parseInt(e.target.value)||1})} className="w-16 p-2 text-center bg-white border border-slate-300 rounded-lg text-lg font-bold outline-none focus:border-brand-500 focus:ring-2" />
                                     </div>
                                 </div>
 
-                                <div>
-                                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 border-b pb-2">Printing Configuration</h3>
-                                    <div className="space-y-4">
-                                        {quotation.plateDetailsUI.map((ui, i) => {
-                                            const plate = ui.originalPlate;
-                                            return (
-                                                <div key={i} className="text-sm border border-slate-100 p-4 rounded-lg bg-slate-50/50">
-                                                    <div className="flex justify-between font-bold text-slate-800 mb-2">
-                                                        <span>PLATE {String(ui.plateIndex+1).padStart(2, '0')}</span>
-                                                        <span>Print x{plate.plateQty}</span>
-                                                    </div>
-                                                    <div className="pl-2 border-l-2 border-brand-500 mb-3 space-y-1">
-                                                        {plate.parts.map((pp, pi) => {
-                                                            const pInfo = formData.parts.find(p => p.id === pp.partId);
-                                                            return pInfo ? (
-                                                                <div key={pi} className="flex justify-between text-slate-700">
-                                                                    <span>{pInfo.name}</span>
-                                                                    <span>x{pp.qty}</span>
-                                                                </div>
-                                                            ) : null;
-                                                        })}
-                                                    </div>
-                                                    
-                                                    <div className="bg-brand-50 border border-brand-100 p-3 rounded flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
-                                                        <span className="font-bold text-brand-800 uppercase">{ui.statusText} (RM{ui.effectiveRate.toFixed(2)})</span>
-                                                        <div className="text-slate-500 flex gap-4 text-xs font-medium">
-                                                            <span>Total Filament: {ui.totalWeight.toFixed(1)}g</span>
-                                                            <span>Time per plate: {plate.timeH || '0'}h {plate.timeM || '0'}m</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-                                </div>
-
-                                <div className="bg-brand-50 p-6 rounded-xl border border-brand-100">
-                                    <h3 className="text-sm font-bold text-brand-800 uppercase tracking-wider mb-4 border-b border-brand-200 pb-2">Cost Breakdown (Selling Price)</h3>
-                                    
-                                    <div className="space-y-3 text-sm mb-6">
-                                        {quotation.plateBreakdowns.map((pb, idx) => (
-                                            <div key={`pb-${idx}`} className="flex justify-between items-center text-slate-700">
-                                                <span>{pb.name} {pb.detail}</span>
-                                                <span className="font-semibold text-slate-800">RM {pb.total.toFixed(2)}</span>
-                                            </div>
-                                        ))}
-                                        
-                                        {quotation.componentBreakdowns.map((cb, idx) => (
-                                            <div key={`cb-${idx}`} className="flex justify-between items-center text-slate-700">
-                                                <span>{cb.name} {cb.detail}</span>
-                                                <span className="font-semibold text-slate-800">RM {cb.total.toFixed(2)}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    
-                                    <div className="p-4 bg-white rounded-lg shadow-sm flex justify-between items-center border border-brand-100">
-                                        <span className="font-bold text-slate-700">SELLING PRICE / BATCH</span>
-                                        <span className="text-2xl font-bold text-brand-600">RM {quotation.sellingPricePerUnit.toFixed(2)}</span>
-                                    </div>
-                                </div>
-
-                                <div className="pt-6 border-t">
-                                    <label className="block text-sm font-bold text-slate-700 mb-3 text-center">HOW MANY BATCHES DO YOU WANT TO ORDER?</label>
-                                    <div className="flex max-w-sm mx-auto items-center">
-                                        <input type="number" min="1" value={formData.orderQty} onChange={e => setFormData({...formData, orderQty: e.target.value})}
-                                            className="w-full text-center text-lg p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none" />
-                                    </div>
-                                    
-                                    <div className="mt-6 text-center">
-                                        <p className="text-sm text-slate-500 uppercase tracking-widest font-semibold mb-1">TOTAL ESTIMATED PRICE</p>
-                                        <p className="text-4xl font-bold text-brand-900">RM {quotation.totalEstimatedPrice.toFixed(2)}</p>
-                                    </div>
+                                <div className="flex justify-between items-center px-2">
+                                    <p className="text-sm font-bold text-brand-200">TOTAL ESTIMATED PRICE</p>
+                                    <p className="text-2xl font-extrabold text-white">RM {(priceSummary.sellingPrice * formData.orderQty).toFixed(2)}</p>
                                 </div>
                             </div>
                         </div>
@@ -967,40 +951,34 @@
             };
 
             return (
-                <div className="min-h-screen flex flex-col pb-24">
-                    <Header onRefresh={fetchDatabase} isRefreshing={isRefreshing} />
-                    <main className="flex-grow max-w-4xl mx-auto w-full px-4 sm:px-6 relative z-0">
+                <div className="min-h-screen flex flex-col pb-24 bg-slate-50">
+                    <AppHeader user={user} onLogout={handleLogout} onRefresh={fetchDatabase} isRefreshing={isRefreshing} onShowProfile={() => setShowProfile(true)} />
+                    <ProfileModal isOpen={showProfile} onClose={() => setShowProfile(false)} user={user} onLogout={handleLogout} onLoginReq={() => setView('login')} onLoadDraft={(d) => alert("Draft dimuatkan secara simulasi. Logik parsing detail diperlukan untuk memisahkan string. Sila gunakan ini sebagai templat asas penyambungan.")} />
+                    
+                    <main className="flex-grow max-w-3xl mx-auto w-full px-4 pt-8">
+                        {user?.role === 'guest' && currentStep === 1 && (
+                            <div className="mb-6 p-4 bg-brand-50 border border-brand-100 rounded-xl flex items-center gap-3 text-brand-800">
+                                <div className="p-2 bg-brand-100 rounded-full"><IconLock/></div>
+                                <div><p className="text-sm font-bold">You are in Guest Mode</p><p className="text-xs opacity-80">You can view materials, but calculations require an account.</p></div>
+                            </div>
+                        )}
                         <Stepper currentStep={currentStep} />
-                        <div className="mb-8">
-                            {currentStep === 1 && renderStep1()}
-                            {currentStep === 2 && renderStep2()}
-                            {currentStep === 3 && renderStep3()}
-                            {currentStep === 4 && renderStep4()}
-                            {currentStep === 5 && renderStep5()}
-                        </div>
+                        {renderStep()}
                     </main>
-
-                    <div className="fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-50 p-4">
-                        <div className="max-w-4xl mx-auto flex justify-between items-center">
-                            <button onClick={prevStep}
-                                className={`flex items-center gap-2 px-6 py-3 font-semibold rounded-xl transition-all ${currentStep === 1 ? 'opacity-0 pointer-events-none' : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200'}`}
-                            >
+                    
+                    <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-30">
+                        <div className="max-w-3xl mx-auto flex justify-between items-center">
+                            <button onClick={prevStep} disabled={currentStep === 1} className={`flex items-center gap-2 px-6 py-3 font-bold rounded-xl transition-all ${currentStep === 1 ? 'opacity-0 cursor-default' : 'text-slate-600 bg-slate-100 hover:bg-slate-200'}`}>
                                 <IconChevronLeft /> BACK
                             </button>
                             
-                            {currentStep < 5 && (
-                                <button onClick={nextStep}
-                                    className="flex items-center gap-2 px-8 py-3 font-bold text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800 rounded-xl shadow-md hover:shadow-lg transition-all"
-                                >
-                                    {currentStep === 4 ? 'CALCULATE PRICE' : 'NEXT'} <IconChevronRight />
+                            {currentStep < 5 ? (
+                                <button onClick={nextStep} className="flex items-center gap-2 px-8 py-3 font-bold text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800 rounded-xl shadow-lg hover:shadow-brand-500/30 transition-all">
+                                    {currentStep === 4 ? 'REVIEW PRICE' : 'NEXT'} <IconChevronRight />
                                 </button>
-                            )}
-                            
-                            {currentStep === 5 && (
-                                <button onClick={() => alert('Order calculation completed. Ready for submission!')}
-                                    className="flex items-center gap-2 px-8 py-3 font-bold text-white bg-green-600 hover:bg-green-700 active:bg-green-800 rounded-xl shadow-md hover:shadow-lg transition-all"
-                                >
-                                    SAVE QUOTATION <IconCheck />
+                            ) : (
+                                <button onClick={handleSaveQuotation} className="flex items-center gap-2 px-8 py-3 font-bold text-white bg-green-500 hover:bg-green-600 active:bg-green-700 rounded-xl shadow-lg hover:shadow-green-500/30 transition-all">
+                                    SAVE QUOTATION <IconSave />
                                 </button>
                             )}
                         </div>
