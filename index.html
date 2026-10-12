@@ -47,7 +47,6 @@
             return isNaN(num) ? 0 : num;
         };
 
-        const handleTextChange = (val) => val.toUpperCase().replace(/[,.:]/g, '');
         const formatForSheet = (val) => val ? String(val).replace(/ /g, '_') : '';
         const formatForDisplay = (val) => val ? String(val).replace(/_/g, ' ') : '';
         const cleanHeader = (val) => val.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -365,10 +364,10 @@
                     return `PLATE${plateNum} [${pl.hours || 0}h ${pl.minutes || 0}m] x${pl.qty} - ${pList}`;
                 }).join(", ");
 
-                const componentsDetailStr = selectedComponents.map(c => {
+                const componentsDetailStr = selectedComponents.length > 0 ? selectedComponents.map(c => {
                     const compObj = db.components.find(x => x.id === c.compId);
                     return `${compObj ? formatForSheet(compObj.name) : 'UNKNOWN'} x${c.qty}`;
-                }).join(", ");
+                }).join(", ") : "-";
 
                 const totalHours = plates.reduce((acc, pl) => acc + (parseInt(pl.hours) || 0), 0);
                 const totalMins = plates.reduce((acc, pl) => acc + (parseInt(pl.minutes) || 0), 0);
@@ -458,7 +457,8 @@
                         {toast && <div className="absolute top-4 right-4 bg-slate-800 border border-slate-700 shadow-xl text-white px-6 py-3 font-bold rounded-xl z-[200]">{toast}</div>}
                         <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
                             <div className="flex justify-center mb-4">
-                                <div className="w-12 h-12 bg-brand-500 rounded-xl flex items-center justify-center text-white font-black text-xl">R</div>
+                                <img src="LOGO_RAKA-CHI.png" alt="RAKA-CHI" className="h-16 w-auto object-contain" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
+                                <div className="hidden w-12 h-12 bg-brand-500 rounded-xl items-center justify-center text-white font-black text-xl">R</div>
                             </div>
                             <h2 className="text-2xl font-black text-slate-900 mb-2 text-center">
                                 {authScreenMode === 'login' ? 'Welcome Back' : 'Create Account'}
@@ -556,7 +556,8 @@
                     
                     <div className="bg-slate-900 text-white p-4 sticky top-0 z-50 glass-panel shadow-sm border-b border-slate-800 flex justify-between items-center">
                         <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center font-black">R</div>
+                            <img src="LOGO_RAKA-CHI.png" alt="R" className="w-8 h-8 object-contain bg-white rounded-lg p-0.5" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
+                            <div className="hidden w-8 h-8 bg-brand-500 rounded-lg items-center justify-center font-black">R</div>
                             <div>
                                 <h1 className="font-black text-sm uppercase tracking-wider">RAKA-CHI Calculate</h1>
                                 <p className="text-[10px] text-brand-200">Quotation System</p>
@@ -626,7 +627,6 @@
                         </div>
                     )}
 
-                    {}
                     {selectedDraft && (
                         <div className="fixed inset-0 bg-slate-900/60 z-[150] flex items-center justify-center p-4 backdrop-blur-sm">
                             <div className="bg-white w-full max-w-md max-h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -673,7 +673,7 @@
                                                         <p className="font-mono font-black text-slate-800 text-lg">{selectedDraft.TOTALPLATES || 0}</p>
                                                     </div>
                                                     <div className="bg-white py-3 rounded-lg border border-slate-200 flex flex-col justify-center items-center text-center shadow-sm">
-                                                        <span className="text-[9px] font-bold text-slate-400 uppercase mb-1">Total Print Time</span>
+                                                        <span className="font-unused text-[9px] font-bold text-slate-400 uppercase mb-1">Total Print Time</span>
                                                         <p className="font-mono font-black text-slate-800 text-lg">{selectedDraft.TIMEPERPLATESH || 0}h {selectedDraft.TIMEPERPLATESM || 0}m</p>
                                                     </div>
                                                 </div>
@@ -692,36 +692,29 @@
                                         )}
                                     </div>
 
-                                    {}
                                     <div className="bg-brand-50 p-5 rounded-2xl border border-brand-100 mt-6 shadow-sm">
                                         <h4 className="font-black text-brand-900 text-sm uppercase border-b border-brand-200 pb-2 mb-3">Pricing Summary</h4>
                                         <div className="space-y-2 text-brand-800 text-sm">
-                                            
-                                            {selectedDraft.TOTALMATERIAL !== undefined ? (
-                                                <React.Fragment>
-                                                    <div className="flex justify-between">
-                                                        <span className="font-medium">Total Material</span>
-                                                        <span className="font-mono font-bold">RM {parseFloat(selectedDraft.TOTALMATERIAL || 0).toFixed(2)}</span>
-                                                    </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="font-medium">Total Components</span>
-                                                        <span className="font-mono font-bold">RM {parseFloat(selectedDraft.TOTALCOMPONENTS || 0).toFixed(2)}</span>
-                                                    </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="font-medium flex flex-col">
-                                                            <span>Total Plate Fee</span>
-                                                            <span className="text-[10px] text-brand-600/70">{selectedDraft.TOTALPLATES || 0} plates @ RM {((parseFloat(selectedDraft.TOTALPLATEFEE || 0)) / (parseInt(selectedDraft.TOTALPLATES || 1))).toFixed(2)}/plate</span>
-                                                        </span>
-                                                        <span className="font-mono font-bold">RM {parseFloat(selectedDraft.TOTALPLATEFEE || 0).toFixed(2)}</span>
-                                                    </div>
-                                                    <div className="flex justify-between">
-                                                        <span className="font-medium">Total Print Time Fee</span>
-                                                        <span className="font-mono font-bold">RM {parseFloat(selectedDraft.TOTALPRINTTIMEFEE || 0).toFixed(2)}</span>
-                                                    </div>
-                                                </React.Fragment>
-                                            ) : null}
-
-                                            <div className={`flex justify-between items-center ${selectedDraft.TOTALMATERIAL !== undefined ? 'pt-3 border-t border-brand-200 mt-3' : ''}`}>
+                                            <div className="flex justify-between">
+                                                <span className="font-medium">Total Material</span>
+                                                <span className="font-mono font-bold">RM {parseFloat(selectedDraft.TOTALMATERIAL || 0).toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="font-medium">Total Components</span>
+                                                <span className="font-mono font-bold">RM {parseFloat(selectedDraft.TOTALCOMPONENTS || 0).toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="font-medium flex flex-col">
+                                                    <span>Total Plate Fee</span>
+                                                    <span className="text-[10px] text-brand-600/70">{selectedDraft.TOTALPLATES || 0} plates @ RM {((parseFloat(selectedDraft.TOTALPLATEFEE || 0)) / (parseInt(selectedDraft.TOTALPLATES || 1))).toFixed(2)}/plate</span>
+                                                </span>
+                                                <span className="font-mono font-bold">RM {parseFloat(selectedDraft.TOTALPLATEFEE || 0).toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="font-medium">Total Print Time Fee</span>
+                                                <span className="font-mono font-bold">RM {parseFloat(selectedDraft.TOTALPRINTTIMEFEE || 0).toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center pt-3 border-t border-brand-200 mt-3">
                                                 <span className="font-black text-slate-900">Selling Price / Unit</span>
                                                 <span className="font-mono font-black text-brand-600 text-lg">RM {parseFloat(selectedDraft.SELLINGPRICEPERUNIT || 0).toFixed(2)}</span>
                                             </div>
@@ -753,7 +746,6 @@
                         </div>
                     )}
 
-                    {}
                     <div className="px-4 py-3 bg-white border-b border-slate-200 overflow-x-auto whitespace-nowrap scrollbar-hide">
                         {[
                             {s: 1, n: 'Materials'}, {s: 2, n: 'Configuration'}, {s: 3, n: 'Plates'}, {s: 4, n: 'Components'}, {s: 5, n: 'Quotation'}
@@ -809,11 +801,9 @@
                                                         </tr>
                                                     </thead>
                                                     <tbody className="divide-y divide-slate-100">
-                                                        {db.components.map(c => (
+                                                        {db.components.filter(c => c.category !== 'SERVICES').map(c => (
                                                             <tr key={c.id} className="hover:bg-slate-50 transition-colors">
-                                                                <td className="p-3 font-bold text-slate-800">
-                                                                    {c.name} {c.category === 'SERVICES' && <span className="ml-2 text-[9px] bg-slate-200 text-slate-600 px-1 rounded uppercase">System Config</span>}
-                                                                </td>
+                                                                <td className="p-3 font-bold text-slate-800">{c.name}</td>
                                                                 <td className="p-3 text-right font-mono font-bold text-brand-600">RM {c.price.toFixed(2)}</td>
                                                             </tr>
                                                         ))}
@@ -824,7 +814,6 @@
                                     </div>
                                 )}
 
-                                {}
                                 {step === 2 && (
                                     <div className="space-y-6">
                                         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
@@ -901,7 +890,6 @@
                                     </div>
                                 )}
 
-                                {}
                                 {step === 3 && (
                                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                                         <div className="flex justify-between items-center mb-4">
@@ -950,7 +938,6 @@
                                     </div>
                                 )}
 
-                                {}
                                 {step === 4 && (
                                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                                         <h2 className="text-lg font-black text-slate-900 mb-4">Additional Components</h2>
@@ -986,7 +973,6 @@
                                     </div>
                                 )}
 
-                                {}
                                 {step === 5 && (
                                     <div className="space-y-4">
                                         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
@@ -1018,8 +1004,32 @@
                                                         ))}
                                                     </div>
                                                 </div>
+
+                                                <div className="mt-6">
+                                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Component summary</h4>
+                                                    <div className="space-y-2">
+                                                        {selectedComponents.length === 0 ? (
+                                                            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-400 italic">No additional components added.</div>
+                                                        ) : selectedComponents.map((c, i) => {
+                                                            const compObj = db.components.find(x => x.id === c.compId);
+                                                            if (!compObj) return null;
+                                                            return (
+                                                                <div key={i} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center">
+                                                                    <div>
+                                                                        <span className="font-bold text-slate-800 text-sm">{compObj.name}</span>
+                                                                        <span className="text-xs font-bold text-brand-600 bg-brand-100 px-1.5 py-0.5 rounded ml-2">x{c.qty}</span>
+                                                                        <div className="text-[10px] text-slate-500 mt-1">@ RM {c.price.toFixed(2)}/unit</div>
+                                                                    </div>
+                                                                    <div className="text-right">
+                                                                        <div className="font-mono text-sm font-bold text-slate-700">RM {(c.qty * c.price).toFixed(2)}</div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
                                                 
-                                                <div className="border-t border-slate-100 pt-4 space-y-2 text-sm">
+                                                <div className="border-t border-slate-100 pt-4 space-y-2 text-sm mt-6">
                                                     <div className="flex justify-between text-slate-600"><span className="font-medium">Total Material</span><span className="font-mono font-bold">RM {plateMaterialTotal.toFixed(2)}</span></div>
                                                     <div className="flex justify-between text-slate-600"><span className="font-medium">Total Components</span><span className="font-mono font-bold">RM {componentsTotal.toFixed(2)}</span></div>
                                                     <div className="flex justify-between text-slate-600">
